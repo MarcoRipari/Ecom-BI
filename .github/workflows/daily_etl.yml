@@ -1,0 +1,37 @@
+name: Daily ETL Footwear BI
+
+on:
+  schedule:
+    # Esegue ogni giorno alle 02:00 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Permette di lanciare lo script manualmente da GitHub
+
+jobs:
+  run-etl-and-update-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout della repository
+        uses: actions/checkout@v4
+        
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip' # Velocizza le esecuzioni successive
+          
+      - name: 📦 Installazione Dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: ⚙️ Esecuzione Script ETL
+        run: |
+          # Avvia il file che orchestra l'aggiornamento (lo scriveremo per puntare alla cartella raw)
+          python src/run_pipeline.py
+          
+      - name: 💾 Commit & Push dei Parquet aggiornati
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🤖 Dati BI aggiornati automaticamente"
+          file_pattern: "data/storici/*.parquet"
