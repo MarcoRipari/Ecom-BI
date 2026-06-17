@@ -22,7 +22,7 @@ def load_and_clean_data(file_path: str) -> pd.DataFrame:
         # Se sai che i tuoi CSV sono separati da punto e virgola, cambia sep=';'
         df = pd.read_csv(
             file_path, 
-            sep=',', 
+            sep=';', 
             dtype=str, 
             on_bad_lines='warn', # Se trova una riga rotta la salta, ma stampa un Warning nei log di GitHub
             engine='python'      # Usa il parser Python invece di quello C (risolve l'errore C Error)
