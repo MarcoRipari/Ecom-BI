@@ -1,7 +1,7 @@
 # src/run_pipeline.py
 import pandas as pd
 import os
-from etl import load_and_clean_data, apply_business_logic, merge_returns_logic, apply_anagrafica
+from src.etl import load_and_clean_data, apply_business_logic, merge_returns_logic, apply_anagrafica
 
 # Definizione dei percorsi
 RAW_VENDITE_PATH = "data/raw/vendite_oggi.csv" # Mettiamo un nome fisso che la Action rinominerà
