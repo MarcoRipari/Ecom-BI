@@ -28,6 +28,7 @@ jobs:
       - name: ⚙️ Esecuzione Script ETL
         run: |
           # Avvia il file che orchestra l'aggiornamento (lo scriveremo per puntare alla cartella raw)
+          PYTHONPATH=. python src/run_pipeline.py
           python src/run_pipeline.py
           
       - name: 💾 Commit & Push dei Parquet aggiornati
