@@ -44,7 +44,19 @@ def main():
         print("\n📥 Elaborazione nuovo file Vendite...")
         df_vendite_daily = load_and_clean_data(RAW_VENDITE_PATH)
         df_vendite_daily = apply_business_logic(df_vendite_daily)
-        # La chiave univoca per deduplicare una vendita è l'ordine e la sku
+        
+        # --- NOVITÀ: INTEGRAZIONE ANAGRAFICA ---
+        if os.path.exists(RAW_ANAGRAFICA_PATH):
+            print("📖 Lettura e mappatura Anagrafica...")
+            # Usa il separatore corretto (es. sep=';' se Excel esporta così)
+            df_anagrafica = pd.read_csv(RAW_ANAGRAFICA_PATH, sep=',', dtype=str) 
+            df_anagrafica.columns = df_anagrafica.columns.str.strip().str.lower()
+            df_vendite_daily = apply_anagrafica(df_vendite_daily, df_anagrafica)
+        else:
+            print("⚠️ File anagrafica non trovato. I generi saranno 'NON CLASSIFICATO'.")
+            df_vendite_daily['genere'] = 'NON CLASSIFICATO'
+            df_vendite_daily['descrizione'] = '-'
+            
         df_master_vendite = update_master_dataset(df_vendite_daily, MASTER_VENDITE_PATH, ['ordine_id', 'sku_full'])
     elif os.path.exists(MASTER_VENDITE_PATH):
         print("\n⚠️ Nessun nuovo file vendite trovato. Utilizzo dello storico...")
