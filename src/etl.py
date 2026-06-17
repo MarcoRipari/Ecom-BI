@@ -48,7 +48,13 @@ def apply_business_logic(df: pd.DataFrame) -> pd.DataFrame:
     cols_to_float = ['prezzo', 'importo', 'qta']
     for col in cols_to_float:
         if col in df.columns:
-            df[col] = df[col].astype(str).str.replace(',', '.').astype(float).fillna(0)
+            df[col] = (df[col]
+                       .astype(str)
+                       .str.strip()
+                       .str.replace('.', '', regex=False)  # Rimuove i separatori delle migliaia (1.437,00 -> 1437,00)
+                       .str.replace(',', '.', regex=False) # Converte la virgola in punto decimale (1437,00 -> 1437.00)
+                       .astype(float)
+                       .fillna(0))
             
     # Assicuriamoci che qta sia assoluta
     df['qta_abs'] = df['qta'].abs()
