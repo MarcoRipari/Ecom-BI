@@ -171,3 +171,45 @@ def update_master_parquet(df_daily: pd.DataFrame, master_path: str):
     df_combined.to_parquet(master_path, index=False, engine='pyarrow')
     print(f"✅ Master Parquet aggiornato: {len(df_combined)} righe totali.")
     return df_combined
+
+def apply_anagrafica(df: pd.DataFrame, df_anag: pd.DataFrame) -> pd.DataFrame:
+    """
+    Mappa le informazioni dell'anagrafica (genere, descrizione) usando prima lo SKU13,
+    e in fallback lo SKU7, replicando la logica del vecchio motore dati.
+    """
+    # Assicuriamoci che gli SKU in anagrafica siano puliti
+    # Adatta i nomi delle colonne 'sku', 'genere' e 'desc' in base agli header reali del tuo CSV anagrafica
+    df_anag['sku'] = df_anag['sku'].astype(str).str.strip()
+    
+    # Creiamo dizionari per un lookup O(1) ultra-veloce
+    dict_genere = df_anag.set_index('sku')['genere'].to_dict()
+    dict_desc = df_anag.set_index('sku')['desc'].to_dict() 
+    
+    # Funzione di fallback veloce: prova sku13, altrimenti sku7
+    def get_anag_value(s13, s7, mapping_dict):
+        val = mapping_dict.get(s13)
+        if pd.isna(val) or val == "":
+            val = mapping_dict.get(s7)
+        return val
+
+    # Applichiamo il lookup vettorializzato sulle righe delle vendite
+    df['genere_raw'] = [get_anag_value(s13, s7, dict_genere) for s13, s7 in zip(df['sku_13'], df['sku_7'])]
+    df['descrizione'] = [get_anag_value(s13, s7, dict_desc) for s13, s7 in zip(df['sku_13'], df['sku_7'])]
+
+    # --- Logica di normalizzazione Macro-Genere (Esatta replica del tuo backend.txt) ---
+    valid_generi = ["BAMBINO", "BAMBINA", "UOMO", "DONNA", "UNISEX", "ACCESSORI", "ABBIGLIAMENTO"]
+    
+    # Pulizia
+    df['genere_raw'] = df['genere_raw'].fillna("").astype(str).str.strip().str.upper()
+    
+    # Assegnazione condizionale
+    cond_vuoto = df['genere_raw'] == ""
+    cond_valido = df['genere_raw'].isin(valid_generi)
+    
+    df['genere'] = np.where(cond_vuoto, "NON CLASSIFICATO",
+                   np.where(cond_valido, df['genere_raw'], "NON MAPPATO"))
+    
+    # Rimuoviamo la colonna di appoggio
+    df.drop(columns=['genere_raw'], inplace=True)
+    
+    return df
