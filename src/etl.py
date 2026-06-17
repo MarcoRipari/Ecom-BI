@@ -13,14 +13,31 @@ from src.config import (
 )
 
 def load_and_clean_data(file_path: str) -> pd.DataFrame:
-    """Carica il CSV e normalizza i nomi delle colonne (tutto minuscolo, spazi in underscore)."""
+    """Carica il CSV, gestisce errori di formattazione e normalizza i nomi delle colonne."""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File non trovato: {file_path}")
     
-    # Adatta qui il separatore se i tuoi CSV usano ';' invece di ','
-    df = pd.read_csv(file_path, sep=',', dtype=str)
+    # Tentiamo la lettura rendendo il parser più flessibile e tollerante
+    try:
+        # Se sai che i tuoi CSV sono separati da punto e virgola, cambia sep=';'
+        df = pd.read_csv(
+            file_path, 
+            sep=',', 
+            dtype=str, 
+            on_bad_lines='warn', # Se trova una riga rotta la salta, ma stampa un Warning nei log di GitHub
+            engine='python'      # Usa il parser Python invece di quello C (risolve l'errore C Error)
+        )
+    except Exception as e:
+        print(f"⚠️ Errore di parsing standard. Tentativo fallback con separatore ';' per {file_path}")
+        df = pd.read_csv(
+            file_path, 
+            sep=';', 
+            dtype=str, 
+            on_bad_lines='warn', 
+            engine='python'
+        )
     
-    # Normalizzazione headers
+    # Normalizzazione headers (tutto minuscolo, spazi sostituiti da underscore)
     df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
     return df
 
