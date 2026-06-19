@@ -1,9 +1,30 @@
 {
-    "Miinto": {
-        "action": "order_first_two"
-    },
-    "Sarenza": {
-        "action": "set",
-        "value": "FR"
-    }
+    "target_nation_values": [
+        "anonymized"
+    ],
+    "rules": [
+        {
+            "condition": "contains",
+            "keyword": "Miinto",
+            "action": "extract_from_order",
+            "extract_method": "first_two_chars"
+        },
+        {
+            "condition": "contains",
+            "keyword": "_",
+            "action": "extract_from_column",
+            "extract_method": "before_underscore"
+        },
+        {
+            "condition": "contains",
+            "keyword": "Sarenza",
+            "action": "set_value",
+            "value": "FR"
+        },
+        {
+            "condition": "default",
+            "action": "extract_from_column",
+            "extract_method": "last_two_chars"
+        }
+    ]
 }

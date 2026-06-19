@@ -17,8 +17,32 @@ def fix_anonymized_nations(df, last_col):
     if not os.path.exists(config_path):
         os.makedirs("config", exist_ok=True)
         default_config = {
-            "Miinto": {"action": "order_first_two"},
-            "Sarenza": {"action": "set", "value": "FR"}
+            "target_nation_values": ["anonymized"],
+            "rules": [
+                {
+                    "condition": "contains",
+                    "keyword": "Miinto",
+                    "action": "extract_from_order",
+                    "extract_method": "first_two_chars"
+                },
+                {
+                    "condition": "contains",
+                    "keyword": "_",
+                    "action": "extract_from_column",
+                    "extract_method": "before_underscore"
+                },
+                {
+                    "condition": "contains",
+                    "keyword": "Sarenza",
+                    "action": "set_value",
+                    "value": "FR"
+                },
+                {
+                    "condition": "default",
+                    "action": "extract_from_column",
+                    "extract_method": "last_two_chars"
+                }
+            ]
         }
         with open(config_path, "w") as f:
             json.dump(default_config, f, indent=4)
@@ -26,7 +50,8 @@ def fix_anonymized_nations(df, last_col):
     with open(config_path, "r") as f:
         mapping = json.load(f)
         
-    mask = df['naz'].astype(str).str.lower().str.strip() == 'anonymized'
+    target_values = [v.lower() for v in mapping.get('target_nation_values', ['anonymized'])]
+    mask = df['naz'].astype(str).str.lower().str.strip().isin(target_values)
     if not mask.any():
         return df
         
@@ -34,19 +59,32 @@ def fix_anonymized_nations(df, last_col):
         mkp_val = str(mkp_val).strip()
         ordine_val = str(ordine_val).strip()
         
-        for key, rule in mapping.items():
-            if key.lower() in mkp_val.lower():
-                if rule['action'] == 'order_first_two':
-                    return ordine_val[:2].upper()
-                elif rule['action'] == 'set':
-                    return rule['value']
-                    
-        if '_' in mkp_val:
-            return mkp_val.split('_')[0].upper()
+        for rule in mapping.get('rules', []):
+            cond = rule.get('condition')
+            kw = rule.get('keyword', '')
+            match = False
             
-        if len(mkp_val) >= 2:
-            return mkp_val[-2:].upper()
-            
+            if cond == 'contains' and kw.lower() in mkp_val.lower():
+                match = True
+            elif cond == 'equals' and kw.lower() == mkp_val.lower():
+                match = True
+            elif cond == 'default':
+                match = True
+                
+            if match:
+                action = rule.get('action')
+                if action == 'extract_from_order':
+                    if rule.get('extract_method') == 'first_two_chars':
+                        return ordine_val[:2].upper()
+                elif action == 'set_value':
+                    return rule.get('value', 'ND')
+                elif action == 'extract_from_column':
+                    if rule.get('extract_method') == 'before_underscore':
+                        return mkp_val.split('_')[0].upper()
+                    elif rule.get('extract_method') == 'last_two_chars':
+                        return mkp_val[-2:].upper() if len(mkp_val) >= 2 else mkp_val.upper()
+                return 'ND'
+                
         return 'ND'
 
     df.loc[mask, 'naz'] = df[mask].apply(lambda x: resolve_single(x[last_col], x.get('ordine_id', '')), axis=1)
