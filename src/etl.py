@@ -166,35 +166,6 @@ def run_etl_pipeline(vendite_path: str, resi_path: str, output_parquet_path: str
     print("✅ ETL completato con successo!")
     return df_final
 
-def update_master_parquet(df_daily: pd.DataFrame, master_path: str):
-    """
-    Fa l'upsert dei dati giornalieri nello storico master.
-    Crea un backup del giorno precedente prima di sovrascrivere.
-    """
-    backup_path = master_path.replace('.parquet', '_backup.parquet')
-    
-    if os.path.exists(master_path):
-        print("📦 Master storico trovato. Creazione backup...")
-        shutil.copy2(master_path, backup_path)
-        
-        print("🔄 Lettura storico e unione con i nuovi dati...")
-        df_storico = pd.read_parquet(master_path)
-        
-        # Uniamo storico e nuovo
-        df_combined = pd.concat([df_storico, df_daily], ignore_index=True)
-        
-        # Rimuoviamo i duplicati basandoci su una chiave univoca dell'ordine/riga
-        # (Assumiamo che ordine_id + sku_full identifichino univocamente una riga di vendita)
-        df_combined = df_combined.drop_duplicates(subset=['ordine_id', 'sku_full'], keep='last')
-    else:
-        print("✨ Nessun master trovato. Inizializzazione nuovo storico...")
-        df_combined = df_daily
-
-    # Salvataggio
-    df_combined.to_parquet(master_path, index=False, engine='pyarrow')
-    print(f"✅ Master Parquet aggiornato: {len(df_combined)} righe totali.")
-    return df_combined
-
 def apply_anagrafica(df: pd.DataFrame, df_anag: pd.DataFrame) -> pd.DataFrame:
     """
     Mappa le informazioni dell'anagrafica (genere, descrizione) usando prima lo SKU13,
@@ -208,16 +179,9 @@ def apply_anagrafica(df: pd.DataFrame, df_anag: pd.DataFrame) -> pd.DataFrame:
     dict_genere = df_anag.set_index('sku')['genere'].to_dict()
     dict_desc = df_anag.set_index('sku')['desc'].to_dict() 
     
-    # Funzione di fallback veloce: prova sku13, altrimenti sku7
-    def get_anag_value(s13, s7, mapping_dict):
-        val = mapping_dict.get(s13)
-        if pd.isna(val) or val == "":
-            val = mapping_dict.get(s7)
-        return val
-
-    # Applichiamo il lookup vettorializzato sulle righe delle vendite
-    df['genere_raw'] = [get_anag_value(s13, s7, dict_genere) for s13, s7 in zip(df['sku_13'], df['sku_7'])]
-    df['descrizione'] = [get_anag_value(s13, s7, dict_desc) for s13, s7 in zip(df['sku_13'], df['sku_7'])]
+    # Applichiamo il lookup in modo vettorializzato sfruttando Pandas (molto più veloce)
+    df['genere_raw'] = df['sku_13'].map(dict_genere).fillna(df['sku_7'].map(dict_genere))
+    df['descrizione'] = df['sku_13'].map(dict_desc).fillna(df['sku_7'].map(dict_desc))
 
     # --- Logica di normalizzazione Macro-Genere (Esatta replica del tuo backend.txt) ---
     valid_generi = ["BAMBINO", "BAMBINA", "UOMO", "DONNA", "UNISEX", "ACCESSORI", "ABBIGLIAMENTO"]

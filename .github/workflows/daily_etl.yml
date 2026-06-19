@@ -29,10 +29,9 @@ jobs:
         run: |
           # Avvia il file che orchestra l'aggiornamento (lo scriveremo per puntare alla cartella raw)
           PYTHONPATH=. python src/run_pipeline.py
-          python src/run_pipeline.py
           
       - name: 💾 Commit & Push dei Parquet aggiornati
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "🤖 Dati BI aggiornati automaticamente"
-          file_pattern: "data/storici/*.parquet"
+          file_pattern: "data/storici/*.parquet data/gold/*.parquet"

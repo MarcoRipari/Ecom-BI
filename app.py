@@ -15,9 +15,10 @@ st.set_page_config(
 def load_data():
     try:
         df = pd.read_parquet("data/gold/bi_metrics.parquet")
-        # Assicuriamoci che le date siano in formato datetime
-        if 'data_vendita' in df.columns:
-            df['data_vendita'] = pd.to_datetime(df['data_vendita'], errors='coerce')
+        # Trova la colonna data corretta (gestisce diverse intestazioni)
+        date_col = 'data_vendita' if 'data_vendita' in df.columns else 'data_pagamento'
+        if date_col in df.columns:
+            df['data_vendita'] = pd.to_datetime(df[date_col], errors='coerce')
         return df
     except FileNotFoundError:
         st.error("⚠️ File bi_metrics.parquet non trovato. Attendi l'esecuzione della pipeline notturna o lanciala manualmente.")
@@ -44,8 +45,17 @@ else:
 
 # 2. Filtro Date (Sostituisce le logiche Y2Y statiche)
 st.sidebar.markdown("---")
-min_date = df_filtered['data_vendita'].min() if 'data_vendita' in df_filtered.columns else pd.to_datetime('2023-01-01')
-max_date = df_filtered['data_vendita'].max() if 'data_vendita' in df_filtered.columns else pd.to_datetime('today')
+if 'data_vendita' in df_filtered.columns and not df_filtered.empty and not pd.isna(df_filtered['data_vendita'].min()):
+    min_date = df_filtered['data_vendita'].min()
+    max_date = df_filtered['data_vendita'].max()
+else:
+    min_date = pd.to_datetime('2023-01-01')
+    max_date = pd.to_datetime('today')
+
+# Assicuriamoci che min_date non sia NaT o superiore a max_date per evitare crash
+if pd.isna(min_date) or pd.isna(max_date) or min_date > max_date:
+    min_date = pd.to_datetime('2023-01-01')
+    max_date = pd.to_datetime('today')
 
 date_range = st.sidebar.date_input(
     "Periodo di Analisi",
@@ -54,7 +64,7 @@ date_range = st.sidebar.date_input(
     max_value=max_date
 )
 
-if len(date_range) == 2:
+if len(date_range) == 2 and 'data_vendita' in df_filtered.columns:
     start_date, end_date = date_range
     df_filtered = df_filtered[
         (df_filtered['data_vendita'] >= pd.to_datetime(start_date)) & 
