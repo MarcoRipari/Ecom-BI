@@ -2,6 +2,9 @@ name: Ingest Vendite
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "data/raw/vendite_oggi.csv"
 
 jobs:
   ingest:

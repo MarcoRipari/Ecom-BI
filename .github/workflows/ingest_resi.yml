@@ -2,6 +2,9 @@ name: Ingest Resi
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "data/raw/resi_oggi.csv"
 
 jobs:
   ingest:

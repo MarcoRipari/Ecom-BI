@@ -2,6 +2,9 @@ name: Ingest Buying
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "data/raw/buying.csv"
 
 jobs:
   ingest:

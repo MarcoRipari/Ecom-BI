@@ -2,6 +2,9 @@ name: Ingest Anagrafica
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "data/raw/anagrafica_new.csv"
 
 jobs:
   ingest:
