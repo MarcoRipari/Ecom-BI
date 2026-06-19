@@ -43,7 +43,7 @@ def aggregate_by_key(df: pd.DataFrame, key_column: str) -> pd.DataFrame:
     ).reset_index()
 
     # Calcolo incidenze e % di reso
-    agg_df['perc_reso'] = (agg_df['paia_rese'] / agg_df['paia_spedite']).fillna(0)
+    agg_df['perc_reso'] = (agg_df['paia_rese'] / agg_df['paia_spedite'].replace(0, np.nan)).fillna(0) * 100
     agg_df['scontrino_medio'] = (agg_df['fatturato_spedito'] / agg_df['ordini']).fillna(0)
     
     # Ordiniamo per fatturato decrescente

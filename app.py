@@ -85,16 +85,8 @@ elif perimetro == "SOLO LOGISTICA ESTERNA":
 
 # --- SELEZIONE REPORT ---
 report_selezionato = st.sidebar.selectbox(
-    "📊 Seleziona Report",
-    [
-        "Dashboard Anno Corrente", 
-        "Comparativa Y2Y", 
-        "Y2Y Collezioni", 
-        "Y2Y Codici", 
-        "Carryover", 
-        "Sell-Through", 
-        "Analisi Taglie"
-    ]
+    "Modulo di Analisi",
+    ["Dashboard Anno Corrente", "Comparativa Y2Y", "Y2Y Collezioni", "Y2Y Codici", "Carryover", "Sell-Through", "Analisi Taglie", "🔧 Area Admin"]
 )
 
 st.sidebar.markdown("---")
@@ -162,7 +154,7 @@ if report_selezionato == "Dashboard Anno Corrente":
                 use_container_width=True,
                 column_config={
                     "Fatturato Netto": st.column_config.NumberColumn(format="€ %.2f"),
-                    "% Reso": st.column_config.ProgressColumn(format="%.2f", min_value=0, max_value=1)
+                    "% Reso": st.column_config.ProgressColumn(format="%.2f%%", min_value=0, max_value=100)
                 }
             )
 
@@ -262,3 +254,69 @@ elif report_selezionato == "Analisi Taglie":
                 "perc_su_gruppo": st.column_config.NumberColumn(format="%.2f%%"),
                 "perc_reso": st.column_config.NumberColumn(format="%.2f%%")
             })
+
+elif report_selezionato == "🔧 Area Admin":
+    st.subheader("🛠️ Area Amministrazione e Upload Dati")
+    st.markdown("In questa sezione puoi caricare nuovi dataset e forzare l'esecuzione della Pipeline ETL su GitHub Actions.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("#### 📤 Upload Dataset")
+        upload_type = st.selectbox("Seleziona il tipo di file:", ["VENDITE", "RESI", "BUYING", "ANAGRAFICA"])
+        uploaded_file = st.file_uploader(f"Carica il file {upload_type} (CSV)", type=["csv"])
+        
+        if uploaded_file is not None:
+            if st.button(f"🚀 Carica {upload_type} su GitHub"):
+                from src.github_integration import upload_file_to_github
+                if "GITHUB_TOKEN" in st.secrets:
+                    token = st.secrets["GITHUB_TOKEN"]
+                    repo = "MarcoRipari/Ecom-BI"
+                    
+                    # Definisci il path di destinazione in base al tipo
+                    if upload_type == "VENDITE":
+                        path = "data/raw/vendite_oggi.csv"
+                    elif upload_type == "RESI":
+                        path = "data/raw/resi_oggi.csv"
+                    elif upload_type == "BUYING":
+                        path = "data/raw/buying_oggi.csv"
+                    elif upload_type == "ANAGRAFICA":
+                        path = "data/raw/anagrafica_oggi.csv"
+                        
+                    with st.spinner(f"Caricamento di {upload_type} in corso..."):
+                        success = upload_file_to_github(
+                            token=token,
+                            repo=repo,
+                            file_path=path,
+                            new_content_bytes=uploaded_file.getvalue(),
+                            commit_message=f"Upload manuale file {upload_type} da Area Admin"
+                        )
+                        if success:
+                            st.success(f"✅ {upload_type} caricato con successo in `{path}`. Verrà processato dalla prossima pipeline ETL.")
+                        else:
+                            st.error("❌ Errore durante l'upload. Controlla il Token o i permessi del repository.")
+                else:
+                    st.error("❌ GITHUB_TOKEN non configurato nei secrets di Streamlit.")
+                    
+    with col2:
+        st.write("#### ⚙️ Pipeline ETL")
+        from src.github_integration import trigger_github_workflow, get_workflow_runs
+        
+        if st.button("🔄 Forza Avvio ETL (GitHub Actions)"):
+            if "GITHUB_TOKEN" in st.secrets:
+                with st.spinner("Invio comando a GitHub..."):
+                    if trigger_github_workflow(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI"):
+                        st.success("✅ Pipeline ETL avviata! Il processo richiederà alcuni minuti.")
+                    else:
+                        st.error("❌ Impossibile avviare la pipeline. Verifica il token o il nome del workflow.")
+            else:
+                st.error("❌ GITHUB_TOKEN non configurato nei secrets di Streamlit.")
+                
+        st.write("##### Ultime Esecuzioni Pipeline:")
+        if "GITHUB_TOKEN" in st.secrets:
+            runs = get_workflow_runs(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI")
+            if runs:
+                for run in runs:
+                    status_icon = "✅" if run['conclusion'] == "success" else ("⏳" if run['status'] in ["in_progress", "queued"] else "❌")
+                    st.write(f"{status_icon} **{run['name']}** - {run['status']} (Conclusione: {run['conclusion']}) - [Vedi Log]({run['html_url']})")
+            else:
+                st.info("Nessuna esecuzione recente trovata.")

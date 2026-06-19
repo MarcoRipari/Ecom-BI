@@ -4,12 +4,18 @@ import os
 from src.etl import load_and_clean_data, apply_business_logic, merge_returns_logic, apply_anagrafica
 
 # Definizione dei percorsi
-RAW_VENDITE_PATH = "data/raw/vendite_oggi.csv" # Mettiamo un nome fisso che la Action rinominerà
+RAW_VENDITE_PATH = "data/raw/vendite_oggi.csv"
 RAW_RESI_PATH = "data/raw/resi_oggi.csv"
 RAW_ANAGRAFICA_PATH = "data/raw/anagrafica.csv" 
+RAW_ANAGRAFICA_OGGI_PATH = "data/raw/anagrafica_oggi.csv"
+RAW_BUYING_PATH = "data/raw/buying_oggi.csv"
+
 MASTER_VENDITE_PATH = "data/storici/master_vendite.parquet"
 MASTER_RESI_PATH = "data/storici/master_resi.parquet"
+MASTER_BUYING_PATH = "data/storici/master_buying.parquet"
+
 GOLD_BI_PATH = "data/gold/bi_metrics.parquet"
+GOLD_BUYING_PATH = "data/gold/buying.parquet"
 
 def update_master_dataset(df_daily: pd.DataFrame, master_path: str, subset_keys: list) -> pd.DataFrame:
     """
@@ -39,17 +45,40 @@ def update_master_dataset(df_daily: pd.DataFrame, master_path: str, subset_keys:
 def main():
     print("🚀 Inizio Pipeline Notturna...")
 
+    # --- 0. UPSERT ANAGRAFICA ---
+    if os.path.exists(RAW_ANAGRAFICA_OGGI_PATH):
+        print("\n📥 Elaborazione nuovo file Anagrafica...")
+        df_ana_oggi = pd.read_csv(RAW_ANAGRAFICA_OGGI_PATH, sep=None, engine='python', dtype=str)
+        df_ana_oggi.columns = df_ana_oggi.columns.str.strip().str.lower()
+        if os.path.exists(RAW_ANAGRAFICA_PATH):
+            df_ana_storico = pd.read_csv(RAW_ANAGRAFICA_PATH, sep=None, engine='python', dtype=str)
+            df_ana_storico.columns = df_ana_storico.columns.str.strip().str.lower()
+            
+            # Assumiamo che ci sia una colonna 'sku' o 'codice' come chiave
+            chiave = 'sku_13' if 'sku_13' in df_ana_oggi.columns else (df_ana_oggi.columns[0])
+            
+            df_ana_storico.set_index(chiave, inplace=True)
+            df_ana_oggi.set_index(chiave, inplace=True)
+            
+            df_ana_storico.update(df_ana_oggi) # Sovrascrive i vecchi dati
+            new_rows = df_ana_oggi[~df_ana_oggi.index.isin(df_ana_storico.index)]
+            df_ana_final = pd.concat([df_ana_storico, new_rows]).reset_index()
+        else:
+            df_ana_final = df_ana_oggi
+            
+        df_ana_final.to_csv(RAW_ANAGRAFICA_PATH, index=False)
+        os.remove(RAW_ANAGRAFICA_OGGI_PATH)
+        print("✅ Anagrafica aggiornata e master salvato.")
+
     # --- 1. INGESTIONE E APPEND VENDITE ---
     if os.path.exists(RAW_VENDITE_PATH):
         print("\n📥 Elaborazione nuovo file Vendite...")
         df_vendite_daily = load_and_clean_data(RAW_VENDITE_PATH)
         df_vendite_daily = apply_business_logic(df_vendite_daily)
         
-        # --- NOVITÀ: INTEGRAZIONE ANAGRAFICA ---
         if os.path.exists(RAW_ANAGRAFICA_PATH):
             print("📖 Lettura e mappatura Anagrafica...")
-            # Usa il separatore corretto (es. sep=';' se Excel esporta così)
-            df_anagrafica = pd.read_csv(RAW_ANAGRAFICA_PATH, sep=',', dtype=str) 
+            df_anagrafica = pd.read_csv(RAW_ANAGRAFICA_PATH, sep=None, engine='python', dtype=str) 
             df_anagrafica.columns = df_anagrafica.columns.str.strip().str.lower()
             df_vendite_daily = apply_anagrafica(df_vendite_daily, df_anagrafica)
         else:
@@ -91,9 +120,30 @@ def main():
     df_gold.to_parquet(GOLD_BI_PATH, index=False, engine='pyarrow')
     print(f"🌟 Gold Layer generato con successo! ({len(df_gold)} righe)")
 
-    # (Opzionale) Pulizia dei file CSV raw caricati per preparare la cartella per il giorno dopo
+    # --- 4. INGESTIONE E APPEND BUYING ---
+    if os.path.exists(RAW_BUYING_PATH):
+        print("\n📥 Elaborazione nuovo file Buying...")
+        df_buying_daily = pd.read_csv(RAW_BUYING_PATH, sep=None, engine='python', dtype=str)
+        # Semplice append allo storico
+        if os.path.exists(MASTER_BUYING_PATH):
+            df_buying_storico = pd.read_parquet(MASTER_BUYING_PATH)
+            df_buying = pd.concat([df_buying_storico, df_buying_daily], ignore_index=True).drop_duplicates()
+        else:
+            df_buying = df_buying_daily
+            
+        df_buying.to_parquet(MASTER_BUYING_PATH, index=False, engine='pyarrow')
+        os.makedirs(os.path.dirname(GOLD_BUYING_PATH), exist_ok=True)
+        df_buying.to_parquet(GOLD_BUYING_PATH, index=False, engine='pyarrow')
+        print(f"🌟 Gold Layer Buying generato con successo! ({len(df_buying)} righe)")
+    elif os.path.exists(MASTER_BUYING_PATH):
+        df_buying_storico = pd.read_parquet(MASTER_BUYING_PATH)
+        os.makedirs(os.path.dirname(GOLD_BUYING_PATH), exist_ok=True)
+        df_buying_storico.to_parquet(GOLD_BUYING_PATH, index=False, engine='pyarrow')
+
+    # Pulizia dei file CSV raw caricati per preparare la cartella per il giorno dopo
     if os.path.exists(RAW_VENDITE_PATH): os.remove(RAW_VENDITE_PATH)
     if os.path.exists(RAW_RESI_PATH): os.remove(RAW_RESI_PATH)
+    if os.path.exists(RAW_BUYING_PATH): os.remove(RAW_BUYING_PATH)
     print("🧹 File temporanei rimossi.")
 
 if __name__ == "__main__":

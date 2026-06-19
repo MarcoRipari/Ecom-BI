@@ -35,18 +35,18 @@ def aggregate_y2y(df_curr: pd.DataFrame, df_old: pd.DataFrame, group_col: str) -
     
     df_merged = pd.merge(agg_c, agg_o, on=group_col, how='outer').fillna(0)
     
-    # Calcolo Variazione %
+    # Calcolo Variazione % con safe division e moltiplicazione x 100
     df_merged['var_fatturato'] = np.where(
         df_merged['fatturato_netto_old'] != 0, 
-        (df_merged['fatturato_netto_curr'] / df_merged['fatturato_netto_old']) - 1, 
+        (df_merged['fatturato_netto_curr'] / df_merged['fatturato_netto_old'].replace(0, np.nan)) - 1, 
         np.where(df_merged['fatturato_netto_curr'] > 0, 1.0, 0.0)
-    )
+    ) * 100
     
     df_merged['var_paia'] = np.where(
         df_merged['paia_nette_old'] != 0, 
-        (df_merged['paia_nette_curr'] / df_merged['paia_nette_old']) - 1, 
+        (df_merged['paia_nette_curr'] / df_merged['paia_nette_old'].replace(0, np.nan)) - 1, 
         np.where(df_merged['paia_nette_curr'] > 0, 1.0, 0.0)
-    )
+    ) * 100
     
     return df_merged.sort_values('fatturato_netto_curr', ascending=False)
 
@@ -70,7 +70,7 @@ def aggregate_taglie(df: pd.DataFrame) -> pd.DataFrame:
     
     # Calcola il totale per gruppo per la percentuale
     tot_gruppo = agg.groupby(['brand', 'sotto_gruppo'])['paia_nette'].transform('sum')
-    agg['perc_su_gruppo'] = np.where(tot_gruppo > 0, agg['paia_nette'] / tot_gruppo, 0)
-    agg['perc_reso'] = np.where(agg['paia_spedite'] > 0, agg['paia_rese'] / agg['paia_spedite'], 0)
+    agg['perc_su_gruppo'] = np.where(tot_gruppo > 0, agg['paia_nette'] / tot_gruppo.replace(0, np.nan), 0) * 100
+    agg['perc_reso'] = np.where(agg['paia_spedite'] > 0, agg['paia_rese'] / agg['paia_spedite'].replace(0, np.nan), 0) * 100
     
     return agg.sort_values(['brand', 'sotto_gruppo', 'taglia'])
