@@ -38,7 +38,21 @@ def load_and_clean_data(file_path: str) -> pd.DataFrame:
         )
     
     # Normalizzazione headers (tutto minuscolo, spazi sostituiti da underscore)
-    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
+    df.columns = df.columns.str.strip().str.lower()
+    
+    # Mappatura robusta per supportare i nomi colonne del file Excel/CSV originale
+    rename_dict = {}
+    for col in df.columns:
+        if 'quantit' in col: rename_dict[col] = 'qta'
+        elif col == 'collezione': rename_dict[col] = 'clz'
+        elif col == 'nazione': rename_dict[col] = 'naz'
+        elif col == 'acquirente': rename_dict[col] = 'nome_cliente'
+        elif col == 'ordine': rename_dict[col] = 'ordine_id'
+        elif 'sku' in col: rename_dict[col] = 'sku_full'
+        elif 'market place' in col or col == 'mkp': rename_dict[col] = 'mkp'
+        
+    df.rename(columns=rename_dict, inplace=True)
+    df.columns = df.columns.str.replace(' ', '_')
     return df
 
 def apply_business_logic(df: pd.DataFrame) -> pd.DataFrame:
@@ -177,7 +191,7 @@ def apply_anagrafica(df: pd.DataFrame, df_anag: pd.DataFrame) -> pd.DataFrame:
     
     # Creiamo dizionari per un lookup O(1) ultra-veloce
     dict_genere = df_anag.set_index('sku')['genere'].to_dict()
-    dict_desc = df_anag.set_index('sku')['desc'].to_dict() 
+    dict_desc = df_anag.set_index('sku')['descrizione'].to_dict() 
     
     # Applichiamo il lookup in modo vettorializzato sfruttando Pandas (molto più veloce)
     df['genere_raw'] = df['sku_13'].map(dict_genere).fillna(df['sku_7'].map(dict_genere))
