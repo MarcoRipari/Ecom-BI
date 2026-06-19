@@ -344,7 +344,8 @@ elif report_selezionato == "🔧 Area Admin":
                 for run in runs:
                     status_icon = "✅" if run['conclusion'] == "success" else ("⏳" if run['status'] in ["in_progress", "queued"] else "❌")
                     nome_run = run.get('name', 'Pipeline')
-                    st.write(f"{status_icon} **{nome_run}** - Stato: `{run['status']}` {f'(Esito: {run.get(\"conclusion\", \"\")})' if run.get('conclusion') else ''} - [Vedi Log]({run['html_url']})")
+                    conclusion_str = f" (Esito: {run.get('conclusion')})" if run.get('conclusion') else ""
+                    st.write(f"{status_icon} **{nome_run}** - Stato: `{run['status']}`{conclusion_str} - [Vedi Log]({run['html_url']})")
             else:
                 st.info("Nessuna esecuzione recente trovata.")
 
