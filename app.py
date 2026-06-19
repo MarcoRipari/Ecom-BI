@@ -318,6 +318,16 @@ elif report_selezionato == "🔧 Area Admin":
         st.write("#### ⚙️ Pipeline ETL")
         from src.github_integration import trigger_github_workflow, get_workflow_runs
         
+        # Check active runs
+        runs = []
+        is_running = False
+        if "GITHUB_TOKEN" in st.secrets:
+            runs = get_workflow_runs(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI")
+            is_running = any(r['status'] in ["in_progress", "queued"] for r in runs) if runs else False
+            
+        if is_running:
+            st.warning("⚠️ C'è una pipeline in elaborazione o in coda. I file caricati ora verranno accodati in automatico senza creare conflitti.")
+        
         if st.button("🔄 Forza Avvio ETL (GitHub Actions)"):
             if "GITHUB_TOKEN" in st.secrets:
                 with st.spinner("Invio comando a GitHub..."):
@@ -328,13 +338,13 @@ elif report_selezionato == "🔧 Area Admin":
             else:
                 st.error("❌ GITHUB_TOKEN non configurato nei secrets di Streamlit.")
                 
-        st.write("##### Ultime Esecuzioni Pipeline:")
+        st.write("##### 📊 Coda e Stato Azioni (Ultime Esecuzioni):")
         if "GITHUB_TOKEN" in st.secrets:
-            runs = get_workflow_runs(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI")
             if runs:
                 for run in runs:
                     status_icon = "✅" if run['conclusion'] == "success" else ("⏳" if run['status'] in ["in_progress", "queued"] else "❌")
-                    st.write(f"{status_icon} **{run['name']}** - {run['status']} (Conclusione: {run['conclusion']}) - [Vedi Log]({run['html_url']})")
+                    nome_run = run.get('name', 'Pipeline')
+                    st.write(f"{status_icon} **{nome_run}** - Stato: `{run['status']}` {f'(Esito: {run.get(\"conclusion\", \"\")})' if run.get('conclusion') else ''} - [Vedi Log]({run['html_url']})")
             else:
                 st.info("Nessuna esecuzione recente trovata.")
 

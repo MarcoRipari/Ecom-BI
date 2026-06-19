@@ -29,7 +29,7 @@ def upload_file_to_github(token: str, repo: str, file_path: str, new_content_byt
     put_response = requests.put(url, headers=headers, json=payload)
     return put_response.status_code in [200, 201]
 
-def trigger_github_workflow(token: str, repo: str, workflow_name: str = "etl.yml") -> bool:
+def trigger_github_workflow(token: str, repo: str, workflow_name: str = "daily_etl.yml") -> bool:
     """Avvia forzatamente una GitHub Action via API."""
     url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_name}/dispatches"
     headers = {
@@ -40,9 +40,9 @@ def trigger_github_workflow(token: str, repo: str, workflow_name: str = "etl.yml
     response = requests.post(url, headers=headers, json=payload)
     return response.status_code == 204
 
-def get_workflow_runs(token: str, repo: str, workflow_name: str = "etl.yml") -> list:
+def get_workflow_runs(token: str, repo: str) -> list:
     """Recupera le ultime esecuzioni della pipeline."""
-    url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_name}/runs?per_page=5"
+    url = f"https://api.github.com/repos/{repo}/actions/runs?per_page=8"
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.v3+json"
