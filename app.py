@@ -97,8 +97,10 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard Base", "👕 Analisi Resi", "�
 with tab1:
     st.subheader("Dettaglio per Marketplace")
     df_mkp = aggregate_by_key(df_filtered, 'mkp')
-    # Rinomina colonne per UI
-    df_mkp.columns = ['Marketplace', 'Ordini', 'Paia Spedite', 'Paia Rese', 'Paia Nette', 'Scontrino Medio', 'Fatturato Netto', '% Reso']
+    # Rinomina colonne per UI (9 elementi)
+    df_mkp.columns = ['Marketplace', 'Ordini', 'Paia Spedite', 'Paia Rese', 'Paia Nette', 'Fatturato Spedito', 'Fatturato Netto', '% Reso', 'Scontrino Medio']
+    # Seleziona e riordina le colonne da mostrare
+    df_mkp = df_mkp[['Marketplace', 'Ordini', 'Paia Spedite', 'Paia Rese', 'Paia Nette', 'Scontrino Medio', 'Fatturato Netto', '% Reso']]
     st.dataframe(
         df_mkp, 
         use_container_width=True,
@@ -112,7 +114,8 @@ with tab1:
 with tab2:
     st.subheader("Status Resi per Brand / Collezione")
     df_brand = aggregate_by_key(df_filtered, 'clz_mappata')
-    df_brand.columns = ['Collezione', 'Ordini', 'Paia Spedite', 'Paia Rese', 'Paia Nette', 'Scontrino Medio', 'Fatturato Netto', '% Reso']
+    # Rinomina colonne (9 elementi)
+    df_brand.columns = ['Collezione', 'Ordini', 'Paia Spedite', 'Paia Rese', 'Paia Nette', 'Fatturato Spedito', 'Fatturato Netto', '% Reso', 'Scontrino Medio']
     
     # Ricostruzione della logica semaforo (ex generateResiModulo)
     def get_status(perc):
@@ -142,15 +145,17 @@ with tab3:
     # Generazione dell'URL immagine per Falc
     df_sku['Immagine'] = df_sku['sku_13'].apply(lambda x: f"https://repository.falc.biz/fal001{str(x).lower()}-1.jpg")
     
-    df_sku_ui = df_sku[['Immagine', 'sku_13', 'Paia Nette', 'Fatturato Netto', '% Reso']].head(50)
+    df_sku_ui = df_sku[['Immagine', 'sku_13', 'paia_nette', 'fatturato_netto', 'perc_reso']].head(50)
+    # Rinomina per UI
+    df_sku_ui.columns = ['Foto', 'SKU', 'Paia Nette', 'Fatturato Netto', '% Reso']
     
     st.dataframe(
         df_sku_ui,
         use_container_width=True,
         column_config={
-            "Immagine": st.column_config.ImageColumn("Foto", help="Anteprima prodotto"),
-            "sku_13": "SKU",
-            "Fatturato Netto": st.column_config.NumberColumn(format="€ %.2f")
+            "Foto": st.column_config.ImageColumn("Foto", help="Anteprima prodotto"),
+            "Fatturato Netto": st.column_config.NumberColumn(format="€ %.2f"),
+            "% Reso": st.column_config.NumberColumn(format="%.2f")
         }
     )
 
