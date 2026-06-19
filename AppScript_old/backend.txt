@@ -1,0 +1,245 @@
+// =========================================================================================
+// 1. CONFIGURAZIONI GLOBALI E MAPPE
+// =========================================================================================
+const CONFIG = {
+  COLS_DATASET: { MKP: 0, NAZ: 1, CLZ: 2, DATA: 4, STATO: 8, ORDINE_ID: 10, VALUTA: 12, PREZZO: 13, IMPORTO: 14, QTA: 15, COUPON: 19, SKU_FULL: 20 },
+  LOGISTICA_ESTERNA: ["_ZFS", "_FBA", "-AMZ"],
+  DEFAULT_IVA: 0.21,
+  SEASON: {
+    FW: { inizioMese: 9, inizioGiorno: 1, fineMese: 3, fineGiorno: 31, settimane: 26 },
+    SS: { inizioMese: 3, inizioGiorno: 1, fineMese: 9, fineGiorno: 30, settimane: 26 },
+  },
+  MAPS: {
+    COLLECTION: {
+      'NATURINO COCOON': 'NATURINO', 'NATURINO CLASSIC': 'NATURINO', 'NATURINO SNEAKERS': 'NATURINO', 'NATURINO OUTDOOR': 'NATURINO', 'NATURINO WILD LIFE': 'NATURINO', 'NATURINO ACTIVE': 'NATURINO', 'NATURINO BABY': 'NATURINO', 'NATURINO EASY': 'NATURINO', 'NATURINO BAREFOOT': 'NATURINO', 'NATURINO RELAX': 'NATURINO',
+      'FALCOTTO SNEAKERS': 'FALCOTTO', 'FALCOTTO CLASSIC': 'FALCOTTO', 'FALCOTTO ACTIVE': 'FALCOTTO', 'FALCOTTO OUTDOOR': 'FALCOTTO',
+      'FLOWER MOUNTAIN': 'FLOWER MOUNTAIN', 'FLOWER M.BY NATURINO': 'FM BY NAT', 'FM ACCESSORI': 'FM ACCESSORI',
+      'W6YZ ADULTO': 'W6YZ', 'W6YZ Adulto': 'W6YZ', 'W6YZ BIMBO': 'W6YZ BIMBO', 'W6YZ Bimbo': 'W6YZ BIMBO', 'W6YZ Accessori-Abbigliamento': 'W6YZ ACCESSORI',
+      'VOILE BLANCHE': 'VOILE BLANCHE', 'VOILE BLANCHE ACCESSORI': 'VB ACCESSORI',
+      'CANDICE COOPER': 'CANDICE COOPER', 'Candice Cooper': 'CANDICE COOPER', 'FALCOTTO ROCK': 'FALCOTTO', 'FALCOTTO NORTH': 'FALCOTTO', 'NATURINO ROCK': 'NATURINO', 'NATURINO MINI': 'NATURINO',
+      'FLOWER M.ABBIGLIAMENTO BIMBO': 'FM ACCESSORI', 'FALCOTTO ABBIGLIAMENTO': 'FALCOTTO', 'FALCOTTO': 'FALCOTTO', 'FALCOTTO BABY': 'FALCOTTO', 'FALCOTTO CULLA ABBIGLIAM': 'FALCOTTO', 'NATURINO YOUNG': 'NATURINO', 'NATURINO ABBIGLIAMENTO': 'NATURINO', 'NATURINO P_P_G_': 'NATURINO'
+    },
+    NATION: {
+      'italia': 'IT', 'italy': 'IT', 'france': 'FR', 'germany': 'DE', 'spain': 'ES', 'united kingdom': 'GB', 'united states': 'US',
+      'stati uniti': 'US', 'belgium': 'BE', 'denmark': 'DK', 'españa': 'ES', 'poland': 'PL', 'sweden': 'SE', 'monaco': 'FR', 'nederland': 'NL'
+    }
+  },
+  TASSI_CAMBIO: {
+    'EUR': 1.00,
+    'CZK': 24.161,
+    'DKK': 7.4686,
+    'GBP': 0.8796,
+    'PLN': 4.238,
+    'SEK': 10.9865,
+    'USD': 1.1614,
+    'CHF': 1.084569,
+  },
+  IVA: {
+    'IT': 0.22, 'DE': 0.19, 'FR': 0.20, 'ES': 0.21, 'BE': 0.21,
+    'NL': 0.21, 'AT': 0.20, 'PL': 0.23, 'SE': 0.25, 'DK': 0.25,
+    'CH': 0.081,'GB': 0.20, 'US': 0.00, 'PT': 0.23, 'IE': 0.23,
+    'GR': 0.24, 'CZ': 0.21, 'RO': 0.19, 'HR': 0.25, 'FI': 0.24,
+    'HU': 0.27, 'SK': 0.20, 'BG': 0.20, 'SI': 0.22, 'LT': 0.21,
+    'LV': 0.21, 'EE': 0.22, 'LU': 0.17, 'CY': 0.19, 'MT': 0.18,
+    'NO': 0.25, 'CA': 0.05, 'RS': 0.20,
+  },
+};
+
+// =========================================================================================
+// 2. MOTORE DATI CENTRALIZZATO
+// =========================================================================================
+
+function loadMasterData(ss) {
+  const master = { rates: CONFIG.TASSI_CAMBIO, iva: CONFIG.IVA, anagrafica: {} }
+  const anagSheet = ss.getSheetByName('ANAGRAFICA');
+  if (anagSheet && anagSheet.getLastRow() > 1) {
+    const anagData = anagSheet.getDataRange().getValues();
+    for (let i = 1; i < anagData.length; i++) {
+      const sku = String(anagData[i][0] || "").trim();
+      const cod = String(anagData[i][6] || "").trim();
+      if (!sku) continue;
+      master.anagrafica[sku] = {
+        desc:  String(anagData[i][9] || "").trim(),
+        clz:   String(anagData[i][4] || "").trim(),
+        serie: String(anagData[i][5] || "").trim(),
+        genere: String(anagData[i][13] || "").trim(),
+      };
+      if(cod && !(cod in master.anagrafica)){
+        master.anagrafica[cod] = {
+          desc:  String(anagData[i][9] || "").trim(),
+          clz:   String(anagData[i][4] || "").trim(),
+          serie: String(anagData[i][5] || "").trim(),
+          genere: String(anagData[i][13] || "").trim(),
+        };
+      }
+    }
+  }
+  return master;
+}
+
+function processDataset(ss, sheetName, masterData) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+  const data = sheet.getDataRange().getValues();
+  data.shift();
+
+  let processedRows = [];
+  const c = CONFIG.COLS_DATASET;
+  const mapNation = CONFIG.MAPS.NATION;
+  const mapCollection = CONFIG.MAPS.COLLECTION;
+  
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    
+    const mkpRaw = String(row[c.MKP] || "").trim();
+    const valutaRaw = String(row[c.VALUTA] || "").toUpperCase().trim();
+    const skuRaw = String(row[c.SKU_FULL] || "").trim();
+    
+    if (!valutaRaw || !mkpRaw || !skuRaw) continue;
+
+    const nazRaw = String(row[c.NAZ] || "").trim();
+    const clzRaw = String(row[c.CLZ] || "").trim();
+    const statoRaw = String(row[c.STATO] || "").toLowerCase().trim();
+    const couponRaw = String(row[c.COUPON] || "").trim(); // Nuova colonna T
+    
+    const importoRaw = row[c.IMPORTO];
+    const prezzoRaw = row[c.PREZZO]; // Nuova colonna N
+    let qta = Number(row[c.QTA]) || 0;
+
+    const isReso = (statoRaw === 'reso');
+    const nazione = mapNation[nazRaw.toLowerCase()] || nazRaw.toUpperCase();
+    const clzMappata = mapCollection[clzRaw] || clzRaw || "NON MAPPATE";
+    
+    const skuPulita = skuRaw.split('-').join(''); 
+    const sku13 = skuPulita.substring(0, 13);
+    const sku7 = skuPulita.substring(0, 7);
+    const skuParts = skuRaw.split('-');
+    const tagliaParts = skuParts[skuParts.length - 1];
+    const tagliaRaw = tagliaParts ? tagliaParts.trim() : "";
+
+    let taglia;
+    if (tagliaRaw === "") {
+      taglia = "UNICA";
+    } else if (/^\d+$/.test(tagliaRaw)) {
+      taglia = tagliaRaw;
+    } else if (/^\d+[\/]?$/.test(tagliaRaw)) {
+      taglia = tagliaRaw;
+    } else if (/^(XXS|XS|S|M|L|XL|XXL|XXXL)$/i.test(tagliaRaw)) {
+      taglia = tagliaRaw.toUpperCase();
+    } else {
+      // Tutto il resto non riconosciuto
+      taglia = "ND";
+    }
+
+    const infoAnag = masterData.anagrafica[sku13] || masterData.anagrafica[sku7] || null;
+    const genereRaw = infoAnag ? infoAnag.genere : "";
+
+    let macroGenere = "NON CLASSIFICATO";
+    if (genereRaw && genereRaw.trim() !== "") {
+      const gUpper = genereRaw.toUpperCase().trim();
+      if (gUpper === "BAMBINO" || gUpper === "BAMBINA" || gUpper === "UOMO" || gUpper === "DONNA" || gUpper === "UNISEX" || gUpper === "ACCESSORI" || gUpper === "ABBIGLIAMENTO") {
+        macroGenere = gUpper; // Mantiene uno dei 3 principali
+      } else {
+        macroGenere = "NON MAPPATO"; // Qualsiasi altro valore testuale (es. INFANT, KID, JUNIOR) diventa BAMBINO
+      }
+    }
+    
+
+    let importoOriginale = 0;
+    if (typeof importoRaw === 'number') { importoOriginale = importoRaw; } 
+    else if (importoRaw) { importoOriginale = parseFloat(String(importoRaw).split('.').join('').replace(',', '.')) || 0; }
+
+    let prezzoOriginale = 0;
+    if (typeof prezzoRaw === 'number') { prezzoOriginale = prezzoRaw; } 
+    else if (prezzoRaw) { prezzoOriginale = parseFloat(String(prezzoRaw).split('.').join('').replace(',', '.')) || 0; }
+
+    let rate = masterData.rates[valutaRaw] || 1.00;
+    const lordoEUR = importoOriginale / rate;
+    const ivaRate = masterData.iva[nazione] !== undefined ? masterData.iva[nazione] : CONFIG.DEFAULT_IVA;
+    const nettoEUR = lordoEUR / (1 + ivaRate);
+
+    const qtaAbs = Math.abs(qta);
+    const lordoAbs = Math.abs(lordoEUR);
+    const nettoAbs = Math.abs(nettoEUR);
+    const importoAbs = Math.abs(importoOriginale);
+
+    // CALCOLO PROMO MATEMATICO: (QTA * PREZZO) - IMPORTO > 0 e COUPON VUOTO
+    // Usiamo > 0.01 per ignorare errori di arrotondamento infinitesimi sui centesimi
+    const isPromo = ((qtaAbs * prezzoOriginale) - importoAbs > 0.01) && (couponRaw === "");
+
+    const paiaSpedite = qtaAbs; 
+    const paiaRese = isReso ? qtaAbs : 0;
+    const paiaNette = paiaSpedite - paiaRese;
+
+    const lordoSpedito = lordoAbs;
+    const lordoReso = isReso ? lordoAbs : 0;
+    const lordoNetto = lordoSpedito - lordoReso;
+
+    const nettoSpedito = nettoAbs;
+    const nettoReso = isReso ? nettoAbs : 0;
+    const nettoNetto = nettoSpedito - nettoReso;
+
+    const ordineId = String(row[c.ORDINE_ID] || "").trim().toUpperCase();
+    let tipoSpedizione = "DIRETTO";
+    if (ordineId.includes("_ZFS") || ordineId.includes("_FBA") || ordineId.includes("-AMZ")) {
+      tipoSpedizione = "ESTERNA";
+    }
+
+    processedRows.push({
+      mkp: mkpRaw, nazione: nazione, clzOriginale: clzRaw, clzMappata: clzMappata, skuFull: skuRaw, sku13: sku13, sku7: sku7, taglia: taglia, genere: macroGenere,
+      qta: paiaNette, lordoEUR: lordoNetto, nettoEUR: nettoNetto, 
+      paiaSpedite: paiaSpedite, paiaRese: paiaRese, paiaNette: paiaNette,
+      nettoSpedito: nettoSpedito, nettoReso: nettoReso, nettoNetto: nettoNetto,
+      lordoSpedito: lordoSpedito, lordoReso: lordoReso, lordoNetto: lordoNetto,
+      dataVendita: (row[c.DATA] instanceof Date && !isNaN(row[c.DATA])) ? new Date(row[c.DATA]) : null,
+      isReso: isReso, ordineId: ordineId, tipoSpedizione: tipoSpedizione, isPromo: isPromo
+    });
+  }
+
+  return processedRows;
+}
+
+// =========================================================================================
+// 3. GESTIONE DESTINAZIONE UNIFICATA
+// =========================================================================================
+
+function getTargetSpreadsheet(isNewFile, ssOrigine, titoloBase) {
+  if (!isNewFile) return ssOrigine;
+  const fileName = titoloBase + " " + Utilities.formatDate(new Date(), "GMT+1", "dd/MM/yyyy HH:mm");
+  const newSS = SpreadsheetApp.create(fileName);
+  try {
+    const currentFile = DriveApp.getFileById(ssOrigine.getId());
+    const parentFolder = currentFile.getParents().next();
+    const newFile = DriveApp.getFileById(newSS.getId());
+    parentFolder.addFile(newFile);
+    DriveApp.getRootFolder().removeFile(newFile);
+  } catch (e) {
+    console.log("Salvataggio in Root: " + e.message);
+  }
+  return newSS;
+}
+
+function prepareTab(targetSS, tabName) {
+  let sheet = targetSS.getSheetByName(tabName);
+  if (sheet) { targetSS.deleteSheet(sheet); }
+  sheet = targetSS.insertSheet(tabName);
+  return sheet;
+}
+
+function parseSellInRaw(ss) {
+  const sheet = ss.getSheetByName("BUYING");
+  if (!sheet) return [];
+  const data = sheet.getDataRange().getValues();
+  const result = [];
+  for (let i = 1; i < data.length; i++) {
+    const codRaw = String(data[i][5] || "").trim().replace(/-/g, "");
+    const varRaw = String(data[i][6] || "").trim().replace(/-/g, "");
+    const colRaw = String(data[i][7] || "").trim().replace(/-/g, "");
+    const qty = Number(data[i][11]) || 0;
+    if (!codRaw || qty === 0) continue;
+    const base = codRaw.startsWith("001") ? codRaw.substring(3) : codRaw;
+    const sku13 = (base + varRaw + colRaw).substring(0, 13).padEnd(13, '0');
+    result.push({ sku13: sku13, qty: qty });
+  }
+  return result;
+}

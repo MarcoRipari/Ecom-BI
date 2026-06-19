@@ -1,0 +1,155 @@
+// =========================================================================================
+// STRUMENTI DI AGGREGAZIONE E FILTRAGGIO (helpers.gs)
+// =========================================================================================
+
+function calculateGlobalMetricsDetailed(dataArray) {
+  const metrics = {
+    lordoTot: 0, lordoDir: 0, lordoEst: 0,
+    nettoTot: 0, nettoDir: 0, nettoEst: 0,
+    paiaSpedTot: 0, paiaSpedDir: 0, paiaSpedEst: 0,
+    paiaResTot: 0, paiaResDir: 0, paiaResEst: 0,
+    paiaNetTot: 0, paiaNetDir: 0, paiaNetEst: 0,
+    ordiniTot: new Set(), ordiniDir: new Set(), ordiniEst: new Set()
+  };
+  
+  dataArray.forEach(row => {
+    // Accumulo perimetro TOTALE
+    metrics.lordoTot += row.lordoSpedito; // Lordo comprensivo di resi
+    metrics.nettoTot += row.nettoNetto;   // Netto IVA e Netto Resi
+    metrics.paiaSpedTot += row.paiaSpedite;
+    metrics.paiaResTot += row.paiaRese;
+    metrics.paiaNetTot += row.paiaNette;
+    if (row.ordineId) metrics.ordiniTot.add(row.ordineId);
+    
+    // Accumulo diviso per canale di spedizione logistica
+    if (row.tipoSpedizione === 'ESTERNA') {
+      metrics.lordoEst += row.lordoSpedito;
+      metrics.nettoEst += row.nettoNetto;
+      metrics.paiaSpedEst += row.paiaSpedite;
+      metrics.paiaResEst += row.paiaRese;
+      metrics.paiaNetEst += row.paiaNette;
+      if (row.ordineId) metrics.ordiniEst.add(row.ordineId);
+    } else {
+      metrics.lordoDir += row.lordoSpedito;
+      metrics.nettoDir += row.nettoNetto;
+      metrics.paiaSpedDir += row.paiaSpedite;
+      metrics.paiaResDir += row.paiaRese;
+      metrics.paiaNetDir += row.paiaNette;
+      if (row.ordineId) metrics.ordiniDir.add(row.ordineId);
+    }
+  });
+  
+  return {
+    tot: { lordo: metrics.lordoTot, netto: metrics.nettoTot, paiaSped: metrics.paiaSpedTot, paiaRes: metrics.paiaResTot, paiaNet: metrics.paiaNetTot, ordini: metrics.ordiniTot.size },
+    dir: { lordo: metrics.lordoDir, netto: metrics.nettoDir, paiaSped: metrics.paiaSpedDir, paiaRes: metrics.paiaResDir, paiaNet: metrics.paiaNetDir, ordini: metrics.ordiniDir.size },
+    est: { lordo: metrics.lordoEst, netto: metrics.nettoEst, paiaSped: metrics.paiaSpedEst, paiaRes: metrics.paiaResEst, paiaNet: metrics.paiaNetEst, ordini: metrics.ordiniEst.size }
+  };
+}
+
+function aggregateByKey(dataArray, keyProperty) {
+  const result = {};
+  let totalFatturato = 0;
+  dataArray.forEach(row => {
+    const key = String(row[keyProperty] || "").trim();
+    if (!key) return;
+    if (!result[key]) {
+      result[key] = { 
+        ordiniSet: new Set(), clzMappata: row.clzMappata, clzOriginale: row.clzOriginale, img: row.sku13 ? row.sku13.toLowerCase() : '',
+        paiaSpedite: 0, paiaRese: 0, paiaNette: 0, fatturatoSpedito: 0, fatturatoReso: 0, fatturatoNetto: 0
+      };
+    }
+    result[key].paiaSpedite += row.paiaSpedite;
+    result[key].paiaRese += row.paiaRese;
+    result[key].paiaNette += row.paiaNette;
+    result[key].fatturatoSpedito += row.nettoSpedito;
+    result[key].fatturatoReso += row.nettoReso;
+    result[key].fatturatoNetto += row.nettoNetto;
+    
+    if (row.ordineId) result[key].ordiniSet.add(row.ordineId);
+    totalFatturato += row.nettoNetto;
+  });
+  
+  Object.keys(result).forEach(k => { result[k].ordini = result[k].ordiniSet.size; });
+  return { map: result, total: totalFatturato };
+}
+
+function aggregateByTagliaPerBrand(dataArray) {
+  // Struttura: { brand: { sottoGruppo: { taglia: { paiaNette, ... } } } }
+  const result = {};
+
+  dataArray.forEach(row => {
+    const brand = row.clzMappata || "ALTRO";
+    const genere = row.genere || "NON CLASSIFICATO";
+    const taglia = row.taglia || "ND";
+
+    // Manteniamo Uomo, Donna, Unisex e Bambino rigorosamente separati
+    let sottoGruppo = "NON CLASSIFICATO";
+    if (genere === "UOMO" || genere === "DONNA" || genere === "UNISEX" || genere === "BAMBINO"  || genere === "BAMBINA" || genere === "ACCESSORI" || genere === "ABBIGLIAMENTO") {
+      sottoGruppo = genere;
+    }
+
+    if (!result[brand]) result[brand] = {};
+    if (!result[brand][sottoGruppo]) result[brand][sottoGruppo] = {};
+    if (!result[brand][sottoGruppo][taglia]) {
+      result[brand][sottoGruppo][taglia] = { paiaNette: 0, paiaSpedite: 0, paiaRese: 0, fatturatoNetto: 0 };
+    }
+
+    result[brand][sottoGruppo][taglia].paiaNette      += row.paiaNette;
+    result[brand][sottoGruppo][taglia].paiaSpedite    += row.paiaSpedite;
+    result[brand][sottoGruppo][taglia].paiaRese       += row.paiaRese;
+    result[brand][sottoGruppo][taglia].fatturatoNetto += row.nettoNetto;
+  });
+
+  return result;
+}
+
+function aggregateHierarchicalCustom(dataArray, keys) {
+  const tree = {};
+  let totalFatturato = 0;
+
+  dataArray.forEach(row => {
+    let currentDict = tree;
+    keys.forEach((keyName, index) => {
+      const kValue = String(row[keyName] || "ALTRO").trim();
+      if (!currentDict[kValue]) {
+        currentDict[kValue] = { paiaSpedite: 0, paiaRese: 0, paiaNette: 0, fatturatoNetto: 0, kids: {} };
+      }
+      currentDict[kValue].paiaSpedite += row.paiaSpedite;
+      currentDict[kValue].paiaRese += row.paiaRese;
+      currentDict[kValue].paiaNette += row.paiaNette;
+      currentDict[kValue].fatturatoNetto += row.nettoNetto;
+      currentDict = currentDict[kValue].kids;
+    });
+    totalFatturato += row.nettoNetto;
+  });
+  return { tree: tree, total: totalFatturato };
+}
+
+function filterCarryoverData(currentData, oldData) {
+  const oldSkus = new Set(oldData.map(row => row.sku13));
+  const currentCarryover = currentData.filter(row => oldSkus.has(row.sku13));
+  const currentSkus = new Set(currentCarryover.map(row => row.sku13));
+  const oldCarryover = oldData.filter(row => currentSkus.has(row.sku13));
+  return { curr: currentCarryover, old: oldCarryover };
+}
+
+function getISOWeekKey(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const w1 = new Date(d.getFullYear(), 0, 4);
+  const wn = 1 + Math.round(((d - w1) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
+  return `${d.getFullYear()}-${String(wn).padStart(2,'0')}`;
+}
+
+function setRowHeightsBatch(sheet, startRow, numRows, height, chunkSize = 300) {
+  if (numRows <= 0) return;
+  let processed = 0;
+  while (processed < numRows) {
+    const chunk = Math.min(chunkSize, numRows - processed);
+    sheet.setRowHeights(startRow + processed, chunk, height);
+    processed += chunk;
+    // Flush solo ogni 900 righe per non sprecare round-trip
+    if (processed % 900 === 0) SpreadsheetApp.flush();
+  }
+}

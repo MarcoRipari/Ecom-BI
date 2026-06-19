@@ -1,0 +1,157 @@
+// =========================================================================================
+// INTERFACCIA UTENTE E SMISTAMENTO EVENTI (menu.gs)
+// =========================================================================================
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🚀 Pannello Report')
+    .addItem('Avvia Generatore Report', 'showUnifiedGenerator')
+    .addSeparator()
+    .addItem('Genera Report Sell-Through', 'showSellThroughGenerator')
+    .addToUi();
+}
+
+function showUnifiedGenerator() {
+  const ui = SpreadsheetApp.getUi();
+  const respDest = ui.alert('Destinazione', 'Vuoi generare i report in un NUOVO file separato?\n\n[Sì] = Nuovo File\n[No] = Tab in questo file', ui.ButtonSet.YES_NO_CANCEL);
+  if (respDest === ui.Button.CANCEL) return;
+  const isNewFile = (respDest === ui.Button.YES);
+
+  // LA DOMANDA SUI RESI E' STATA RIMOSSA: ORA IL SISTEMA E' INTEGRATO.
+
+  const respPerimetro = ui.prompt(
+    'Perimetro di Analisi Spedizioni', 
+    'Su quale perimetro logistico vuoi basare i report?\n\n' +
+    '1. TOTALE (Diretti + Logistica Esterna)\n' +
+    '2. SOLO DIRETTI (Venduti e Spediti da Azienda)\n' +
+    '3. SOLO LOGISTICA ESTERNA (ZFS, FBA, ecc.)', 
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (respPerimetro.getSelectedButton() !== ui.Button.OK) return;
+  const perimetroScelto = respPerimetro.getResponseText().trim();
+
+  const respReport = ui.prompt(
+    'Selezione Report', 
+    'Scrivi i numeri dei report che vuoi generare (separati da virgola, es: 1,2,4,5):\n\n' +
+    '1. Dashboard Base (Solo Corrente con Dettagli)\n' +
+    '2. Comparativa Generali Flat (Mkp/Naz/Clz)\n' +
+    '3. Comparativa Collezioni Albero (+/-)\n' +
+    '4. Comparativa Solo Codici Articolo (SKU)\n' +
+    '5. Analisi Carryover Collezioni Albero (+/-)\n' +
+    '6. Analisi Carryover Codici Articolo (SKU)\n' +
+    '7. Analisi Taglie per Brand\n' +
+    '8. Analisi Resi Completa', 
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (respReport.getSelectedButton() !== ui.Button.OK) return;
+  const selezioni = respReport.getResponseText().split(',').map(n => n.trim());
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const masterData = loadMasterData(ss);
+  
+  // Estrazione Dati: I resi vengono automaticamente incorporati dal nuovo motore
+  let currentData = processDataset(ss, 'DATASET', masterData);
+  let oldData = [];
+  if (selezioni.includes('2') || selezioni.includes('3') || selezioni.includes('4') || selezioni.includes('5') || selezioni.includes('6')) {
+    oldData = processDataset(ss, 'DATASET OLD', masterData);
+  }
+
+  // APPLICAZIONE DEL FILTRO A MONTE LOGISTICA
+  let suffissoTitolo = "";
+  if (perimetroScelto === '2') {
+    currentData = currentData.filter(row => row.tipoSpedizione === 'DIRETTO');
+    if (oldData.length > 0) oldData = oldData.filter(row => row.tipoSpedizione === 'DIRETTO');
+    suffissoTitolo = " - DIRETTI";
+  } else if (perimetroScelto === '3') {
+    currentData = currentData.filter(row => row.tipoSpedizione === 'ESTERNA');
+    if (oldData.length > 0) oldData = oldData.filter(row => row.tipoSpedizione === 'ESTERNA');
+    suffissoTitolo = " - ESTERNI";
+  }
+
+  const targetSS = getTargetSpreadsheet(isNewFile, ss, "Report " + suffissoTitolo);
+
+  // Esecuzione Moduli
+  if (selezioni.includes('1')) generateDashboardModulo(prepareTab(targetSS, 'ANNO CORRENTE'), currentData, masterData.anagrafica, perimetroScelto);
+  if (selezioni.includes('2')) generateComparativaModulo(prepareTab(targetSS, 'Y2Y'), currentData, oldData, perimetroScelto);
+  if (selezioni.includes('3')) generateComparazioneCollezioniModulo(prepareTab(targetSS, 'Y2Y COLLEZIONI'), currentData, oldData);
+  if (selezioni.includes('4')) generateComparativaCodiciModulo(prepareTab(targetSS, 'Y2Y CODICI'), currentData, oldData, masterData.anagrafica);
+  if (selezioni.includes('5')) generateCarryoverModulo(prepareTab(targetSS, 'CARRYOVER Y2Y COLLEZIONI'), currentData, oldData);
+  if (selezioni.includes('6')) generateCarryoverCodiciModulo(prepareTab(targetSS, 'CARRYOVER Y2Y CODICI'), currentData, oldData, masterData.anagrafica);
+  if (selezioni.includes('7')) generateTaglieModulo(prepareTab(targetSS, 'TAGLIE'), currentData);
+  if (selezioni.includes('8')) generateResiModulo(prepareTab(targetSS, 'ANALISI RESI'), currentData, masterData.anagrafica); // Modificato: usa currentData!
+
+  if (isNewFile) {
+    const sheets = targetSS.getSheets();
+    defaultSheetToDelete = sheets[0];
+    if(defaultSheetToDelete.getName() == "Foglio1"){
+      targetSS.deleteSheet(defaultSheetToDelete);
+    }
+  }
+
+  ui.alert(`Report generati con successo!${isNewFile ? '\n\nControlla la cartella di Drive.' : ''}`);
+}
+
+/**
+ * Lancia l'interfaccia esclusiva per il Sell-Through Stagionale
+ */
+function showSellThroughGenerator() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  const respDest = ui.alert('Destinazione Report', '[Sì] Nuovo file separato\n[No] Tab in questo file', ui.ButtonSet.YES_NO);
+  if (respDest === ui.Button.CANCEL) return;
+  const isNewFile = (respDest === ui.Button.YES);
+  
+  const respPerimetro = ui.prompt(
+    'Perimetro Logistico Sell-Through', 
+    'Su quale perimetro vuoi calcolare le vendite?\n\n' +
+    '1. TOTALE (Diretti + Logistica Esterna)\n' +
+    '2. SOLO DIRETTI\n' +
+    '3. SOLO LOGISTICA ESTERNA', 
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (respPerimetro.getSelectedButton() !== ui.Button.OK) return;
+  const perimetroScelto = respPerimetro.getResponseText().trim();
+
+  const masterData = loadMasterData(ss);
+  let currentData = processDataset(ss, 'DATASET', masterData);
+  const sellInRaw = parseSellInRaw(ss);
+
+  if (sellInRaw.length === 0) {
+    ui.alert("Errore: Tab BUYING vuota.");
+    return;
+  }
+
+  let suffissoTitolo = "";
+  if (perimetroScelto === '2') {
+    currentData = currentData.filter(row => row.tipoSpedizione === 'DIRETTO');
+    suffissoTitolo = " - DIRETTI";
+  } else if (perimetroScelto === '3') {
+    currentData = currentData.filter(row => row.tipoSpedizione === 'ESTERNA');
+    suffissoTitolo = " - ESTERNI";
+  }
+
+  const targetSS = getTargetSpreadsheet(isNewFile, ss, `Sell-Through ${suffissoTitolo}`);
+  
+  const livelli = [
+    { lunghezza: 7,  nomeTab: "ARTICOLO",          label: "ARTICOLO" },
+    { lunghezza: 9,  nomeTab: "ART/VARIANTE",      label: "ARTICOLO/VARIANTE" },
+    { lunghezza: 13, nomeTab: "ART/VAR/COLORE",    label: "ARTICOLO/VARIANTE/COLORE" }
+  ];
+
+  livelli.forEach(liv => {
+    const sheet = prepareTab(targetSS, liv.nomeTab);
+    // Non passiamo più stagione, anno, date, prediction o pesoPromo
+    generateSellThroughModulo(sheet, currentData, sellInRaw, masterData.anagrafica, liv.lunghezza, liv.label);
+  });
+
+  if (isNewFile) {
+    const sheets = targetSS.getSheets();
+    defaultSheetToDelete = sheets[0];
+    if(defaultSheetToDelete.getName() == "Foglio1"){
+      targetSS.deleteSheet(defaultSheetToDelete);
+    }
+    targetSS.setActiveSheet(targetSS.getSheetByName("ARTICOLO"));
+  }
+  ui.alert(`✅ Report Sell-Through generato su TUTTE le date presenti!`);
+}

@@ -1,0 +1,333 @@
+// =========================================================================================
+// MOTORI DI DISEGNO GRAFICO E FORMATTAZIONE (tables.gs)
+// =========================================================================================
+
+function drawGlobalTotalsTable(sheet, startRow, currentData, oldData, yCurr, yOld, perimetroScelto) {
+  const c = calculateGlobalMetricsDetailed(currentData);
+  const o = calculateGlobalMetricsDetailed(oldData);
+
+  sheet.getRange(startRow, 1, 1, 10).merge().setBackground("#cfe2f3").setFontWeight('bold').setHorizontalAlignment("center");
+  sheet.getRange(startRow, 1).setValue('📈 DETTAGLIO FATTURATO');
+  startRow++;
+
+  const getVar = (curr, old) => old !== 0 ? (curr / old) - 1 : 0;
+
+  let headers1, headers2, matrixData, numCols;
+
+  if (perimetroScelto === '2') {
+    numCols = 4;
+    headers1 = ['', '', 'DIRETTI', '']; headers2 = ['METRICA', yCurr, yOld, 'VAR % Y2Y'];
+    matrixData = [
+      ['FATTURATO LORDO (€)', c.dir.lordo, o.dir.lordo, getVar(c.dir.lordo, o.dir.lordo)],
+      ['FATTURATO NETTO (€)', c.dir.netto, o.dir.netto, getVar(c.dir.netto, o.dir.netto)],
+      ['TOTALE ORDINI', c.dir.ordini, o.dir.ordini, getVar(c.dir.ordini, o.dir.ordini)],
+      ['PAIA SPEDITE', c.dir.paiaSped, o.dir.paiaSped, getVar(c.dir.paiaSped, o.dir.paiaSped)],
+      ['PAIA RESE', c.dir.paiaRes, o.dir.paiaRes, getVar(c.dir.paiaRes, o.dir.paiaRes)],
+      ['PAIA NETTE', c.dir.paiaNet, o.dir.paiaNet, getVar(c.dir.paiaNet, o.dir.paiaNet)]
+    ];
+  } else if (perimetroScelto === '3') {
+    numCols = 4;
+    headers1 = ['', '', 'ESTERNI', '']; headers2 = ['METRICA', yCurr, yOld, 'VAR % Y2Y'];
+    matrixData = [
+      ['FATTURATO LORDO (€)', c.est.lordo, o.est.lordo, getVar(c.est.lordo, o.est.lordo)],
+      ['FATTURATO NETTO (€)', c.est.netto, o.est.netto, getVar(c.est.netto, o.est.netto)],
+      ['TOTALE ORDINI', c.est.ordini, o.est.ordini, getVar(c.est.ordini, o.est.ordini)],
+      ['PAIA SPEDITE', c.est.paiaSped, o.est.paiaSped, getVar(c.est.paiaSped, o.est.paiaSped)],
+      ['PAIA RESE', c.est.paiaRes, o.est.paiaRes, getVar(c.est.paiaRes, o.est.paiaRes)],
+      ['PAIA NETTE', c.est.paiaNet, o.est.paiaNet, getVar(c.est.paiaNet, o.est.paiaNet)]
+    ];
+  } else {
+    numCols = 10;
+    headers1 = ['', '', 'TOTALE', '', '', 'DIRETTI', '', '', 'ESTERNI', ''];
+    headers2 = ['METRICA', yCurr, yOld, 'VAR % Y2Y', yCurr, yOld, 'VAR % Y2Y', yCurr, yOld, 'VAR % Y2Y'];
+    matrixData = [
+      ['FATTURATO LORDO (€)', c.tot.lordo, o.tot.lordo, getVar(c.tot.lordo, o.tot.lordo), c.dir.lordo, o.dir.lordo, getVar(c.dir.lordo, o.dir.lordo), c.est.lordo, o.est.lordo, getVar(c.est.lordo, o.est.lordo)],
+      ['FATTURATO NETTO (€)', c.tot.netto, o.tot.netto, getVar(c.tot.netto, o.tot.netto), c.dir.netto, o.dir.netto, getVar(c.dir.netto, o.dir.netto), c.est.netto, o.est.netto, getVar(c.est.netto, o.est.netto)],
+      ['TOTALE ORDINI', c.tot.ordini, o.tot.ordini, getVar(c.tot.ordini, o.tot.ordini), c.dir.ordini, o.dir.ordini, getVar(c.dir.ordini, o.dir.ordini), c.est.ordini, o.est.ordini, getVar(c.est.ordini, o.est.ordini)],
+      ['PAIA SPEDITE', c.tot.paiaSped, o.tot.paiaSped, getVar(c.tot.paiaSped, o.tot.paiaSped), c.dir.paiaSped, o.dir.paiaSped, getVar(c.dir.paiaSped, o.dir.paiaSped), c.est.paiaSped, o.est.paiaSped, getVar(c.est.paiaSped, o.est.paiaSped)],
+      ['PAIA RESE', c.tot.paiaRes, o.tot.paiaRes, getVar(c.tot.paiaRes, o.tot.paiaRes), c.dir.paiaRes, o.dir.paiaRes, getVar(c.dir.paiaRes, o.dir.paiaRes), c.est.paiaRes, o.est.paiaRes, getVar(c.est.paiaRes, o.est.paiaRes)],
+      ['PAIA NETTE', c.tot.paiaNet, o.tot.paiaNet, getVar(c.tot.paiaNet, o.tot.paiaNet), c.dir.paiaNet, o.dir.paiaNet, getVar(c.dir.paiaNet, o.dir.paiaNet), c.est.paiaNet, o.est.paiaNet, getVar(c.est.paiaNet, o.est.paiaNet)]
+    ];
+  }
+
+  sheet.getRange(startRow, 1, 1, numCols).setValues([headers1]).setFontWeight('bold').setHorizontalAlignment('center');
+  if (perimetroScelto === '2' || perimetroScelto === '3') sheet.getRange(startRow, 2, 1, 3).setBackground('#d9d9d9');
+  else [2, 5, 8].forEach(col => sheet.getRange(startRow, col, 1, 3).setBackground('#d9d9d9'));
+  startRow++;
+
+  sheet.getRange(startRow, 1, 1, numCols).setValues([headers2]).setFontWeight('bold').setHorizontalAlignment('center');
+  if (perimetroScelto === '2' || perimetroScelto === '3') {
+    sheet.getRange(startRow, 2).setBackground('#b6d7a8'); sheet.getRange(startRow, 3).setBackground('#cfe2f3'); sheet.getRange(startRow, 4).setBackground('#f9cb9c');
+  } else {
+    [2, 5, 8].forEach(col => sheet.getRange(startRow, col).setBackground('#b6d7a8'));
+    [3, 6, 9].forEach(col => sheet.getRange(startRow, col).setBackground('#cfe2f3'));
+    [4, 7, 10].forEach(col => sheet.getRange(startRow, col).setBackground('#f9cb9c'));
+  }
+  startRow++;
+
+  sheet.getRange(startRow, 1, 6, numCols).setValues(matrixData);
+  
+  if (perimetroScelto === '2' || perimetroScelto === '3') {
+    sheet.getRange(startRow, 2, 2, 2).setNumberFormat('€ #,##0.00'); 
+    sheet.getRange(startRow + 2, 2, 4, 2).setNumberFormat('#,##0');    
+    sheet.getRange(startRow, 4, 6, 1).setNumberFormat('0.00%').setFontWeight('bold').setHorizontalAlignment('center');
+  } else {
+    [2, 3, 5, 6, 8, 9].forEach(col => sheet.getRange(startRow, col, 2, 1).setNumberFormat('€ #,##0.00'));
+    [2, 3, 5, 6, 8, 9].forEach(col => sheet.getRange(startRow + 2, col, 4, 1).setNumberFormat('#,##0'));
+    [4, 7, 10].forEach(col => sheet.getRange(startRow, col, 6, 1).setNumberFormat('0.00%').setFontWeight('bold').setHorizontalAlignment('center'));
+  }
+
+  return startRow + 8;
+}
+
+function drawComparativeTable(sheet, startRow, title, aggCurrent, aggOld, yCurr, yOld, sortType = 'fatturatoNetto') {
+  const allKeys = new Set([...Object.keys(aggCurrent.map), ...Object.keys(aggOld.map)]);
+  const sortedKeys = Array.from(allKeys).sort((a, b) => {
+    const valA = aggCurrent.map[a] ? aggCurrent.map[a][sortType] : 0;
+    const valB = aggCurrent.map[b] ? aggCurrent.map[b][sortType] : 0;
+    return valB - valA;
+  });
+
+  sheet.getRange(startRow, 1, 1, 14).merge().setValue(title).setBackground("#cfe2f3").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+  
+  sheet.getRange(startRow, 2, 1, 6).merge().setValue("ANNO CORRENTE (" + yCurr + ")").setBackground("#b6d7a8").setFontWeight('bold').setHorizontalAlignment("center");
+  sheet.getRange(startRow, 8, 1, 6).merge().setValue("ANNO PRECEDENTE (" + yOld + ")").setBackground("#cfe2f3").setFontWeight('bold').setHorizontalAlignment("center");
+  sheet.getRange(startRow, 14).setValue("VARIAZIONE").setBackground("#f9cb9c").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+
+  const headers = ["Chiave", "Ordini", "Paia Nette", "% Reso", "Scontrino Medio", "Fatt Netto (€)", "% su Tot", "Ordini", "Paia Nette", "% Reso", "Scontrino Medio", "Fatt Netto (€)", "% su Tot", "VAR% FATT"];
+  sheet.getRange(startRow, 1, 1, 14).setValues([headers]).setBackground("#eeeeee").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+
+  const rows = [];
+  sortedKeys.forEach(key => {
+    const c = aggCurrent.map[key] || { ordini: 0, paiaSpedite: 0, paiaRese: 0, paiaNette: 0, fatturatoNetto: 0 };
+    const o = aggOld.map[key] || { ordini: 0, paiaSpedite: 0, paiaRese: 0, paiaNette: 0, fatturatoNetto: 0 };
+    
+    const percC = aggCurrent.total > 0 ? c.fatturatoNetto / aggCurrent.total : 0;
+    const percO = aggOld.total > 0 ? o.fatturatoNetto / aggOld.total : 0;
+    const varFatt = o.fatturatoNetto !== 0 ? (c.fatturatoNetto / o.fatturatoNetto) - 1 : (c.fatturatoNetto > 0 ? 1 : 0);
+    const pResoC = c.paiaSpedite > 0 ? c.paiaRese / c.paiaSpedite : 0;
+    const pResoO = o.paiaSpedite > 0 ? o.paiaRese / o.paiaSpedite : 0;
+
+    const ordiniC = Number(c.ordini) || 0;
+    const ordiniO = Number(o.ordini) || 0;
+    const fatturatoC = Number(c.fatturatoSpedito) || 0;
+    const fatturatoO = Number(o.fatturatoSpedito) || 0;
+    const scontrinoMedioC = ordiniC > 0 ? fatturatoC / ordiniC : 0;
+    const scontrinoMedioO = ordiniO > 0 ? fatturatoO / ordiniO : 0;
+
+
+    rows.push([key, c.ordini, c.paiaNette, pResoC, scontrinoMedioC, c.fatturatoNetto, percC, o.ordini, o.paiaNette, pResoO, scontrinoMedioO, o.fatturatoNetto, percO, varFatt]);
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(startRow, 1, rows.length, 14).setValues(rows);
+    sheet.getRange(startRow, 2, rows.length, 2).setNumberFormat('#,##0');
+    sheet.getRange(startRow, 4, rows.length, 1).setNumberFormat('0.00%').setFontColor("#9c0006");
+    sheet.getRange(startRow, 5, rows.length, 2).setNumberFormat('€ #,##0.00');
+    sheet.getRange(startRow, 7, rows.length, 1).setNumberFormat('0.00%');
+    sheet.getRange(startRow, 8, rows.length, 2).setNumberFormat('#,##0');
+    sheet.getRange(startRow, 10, rows.length, 1).setNumberFormat('0.00%').setFontColor("#9c0006");
+    sheet.getRange(startRow, 11, rows.length, 2).setNumberFormat('€ #,##0.00');
+    sheet.getRange(startRow, 13, rows.length, 1).setNumberFormat('0.00%');
+    sheet.getRange(startRow, 14, rows.length, 1).setNumberFormat('0.00%').setFontWeight('bold');
+    startRow += rows.length;
+  }
+  return startRow + 2;
+}
+
+function drawSingleYearTable(sheet, startRow, title, aggregator, yCurr, sortType = 'fatturatoNetto') {
+  const sortedKeys = Object.keys(aggregator.map).sort((a,b) => aggregator.map[b][sortType] - aggregator.map[a][sortType]);
+  sheet.getRange(startRow, 1, 1, 8).merge().setValue(title + " (" + yCurr + ")").setBackground("#b6d7a8").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+  const headers = ["Chiave", "Ordini", "Paia Spedite", "Paia Rese", "% Reso", "Paia Nette", "Scontrino Medio", "Fatturato Netto (€)"];
+  sheet.getRange(startRow, 1, 1, 8).setValues([headers]).setBackground("#eeeeee").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+
+  const rows = [];
+  sortedKeys.forEach(key => {
+    const c = aggregator.map[key];
+    const percReso = c.paiaSpedite > 0 ? c.paiaRese / c.paiaSpedite : 0;
+    const scontrinoMedio = c.ordini > 0 ? c.fatturatoSpedito / c.ordini : 0;
+    rows.push([key, c.ordini, c.paiaSpedite, c.paiaRese, percReso, c.paiaNette, scontrinoMedio, c.fatturatoNetto]);
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(startRow, 1, rows.length, 8).setValues(rows);
+    sheet.getRange(startRow, 2, rows.length, 3).setNumberFormat('#,##0');
+    sheet.getRange(startRow, 6, rows.length, 1).setNumberFormat('#,##0');
+    sheet.getRange(startRow, 5, rows.length, 1).setNumberFormat('0.00%').setFontColor("#9c0006");
+    sheet.getRange(startRow, 7, rows.length, 1).setNumberFormat('€ #,##0.00');
+    sheet.getRange(startRow, 8, rows.length, 1).setNumberFormat('€ #,##0.00');
+    startRow += rows.length;
+  }
+  return startRow + 2;
+}
+
+function drawCustomHierarchicalTable(sheet, startRow, title, currentTree, oldTree, yCurr, yOld, levelNames) {
+  const maxDepth = levelNames.length;
+  sheet.getRange(startRow, 1, 1, 11).merge().setValue(title).setBackground("#4a86e8").setFontColor("white").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+
+  const headers = [levelNames.join(" / "), "Paia Net "+yCurr, "% Reso "+yCurr, "Fatt. Netto "+yCurr, "% Tot", "Paia Net "+yOld, "% Reso "+yOld, "Fatt. Netto "+yOld, "% Tot", "VAR% FATT", "VAR% PAIA"];
+  sheet.getRange(startRow, 1, 1, 11).setValues([headers]).setBackground("#eeeeee").setFontWeight('bold');
+  const firstDataRow = startRow + 1;
+  startRow++;
+
+  const rowsData = [];
+  const rowStyles = [];
+
+  // Funzione ricorsiva di estrazione
+  function traverse(currTreeNodes, oldTreeNodes, depth) {
+    const allKeys = new Set([...Object.keys(currTreeNodes || {}), ...Object.keys(oldTreeNodes || {})]);
+    const sortedKeys = Array.from(allKeys).sort((a,b) => {
+      const fA = currTreeNodes && currTreeNodes[a] ? currTreeNodes[a].fatturatoNetto : 0;
+      const fB = currTreeNodes && currTreeNodes[b] ? currTreeNodes[b].fatturatoNetto : 0;
+      return fB - fA;
+    });
+
+    sortedKeys.forEach(key => {
+      const cNode = (currTreeNodes && currTreeNodes[key]) ? currTreeNodes[key] : { paiaSpedite: 0, paiaRese: 0, paiaNette: 0, fatturatoNetto: 0, kids: {} };
+      const oNode = (oldTreeNodes && oldTreeNodes[key]) ? oldTreeNodes[key] : { paiaSpedite: 0, paiaRese: 0, paiaNette: 0, fatturatoNetto: 0, kids: {} };
+      
+      const pC = currentTree.total > 0 ? cNode.fatturatoNetto / currentTree.total : 0;
+      const pO = oldTree.total > 0 ? oNode.fatturatoNetto / oldTree.total : 0;
+      const vF = oNode.fatturatoNetto ? (cNode.fatturatoNetto / oNode.fatturatoNetto) - 1 : 0;
+      const vP = oNode.paiaNette ? (cNode.paiaNette / oNode.paiaNette) - 1 : 0;
+      const pResoC = cNode.paiaSpedite > 0 ? cNode.paiaRese / cNode.paiaSpedite : 0;
+      const pResoO = oNode.paiaSpedite > 0 ? oNode.paiaRese / oNode.paiaSpedite : 0;
+
+      let prefixIcon = "";
+      if (depth === 0) prefixIcon = "📁 ";
+      else if (depth === 1) prefixIcon = "🏷️ ";
+      else {
+        const lName = levelNames[depth] ? levelNames[depth].toLowerCase() : "";
+        if (lName.includes("market")) prefixIcon = "📦 "; else if (lName.includes("nazion")) prefixIcon = "🌍 "; else prefixIcon = "📌 ";
+      }
+      const spaces = "      ".repeat(depth);
+      const prefix = spaces + prefixIcon + (depth === 0 ? key.toUpperCase() : key);
+      let bg = "#ffffff", weight = "normal", style = "normal", color = "#000000";
+      
+      if (depth === 0) { bg = "#d9d9d9"; weight = "bold"; } 
+      else if (depth === maxDepth - 1) { style = "italic"; color = "#666666"; } 
+      else { bg = (depth % 2 === 1) ? "#ffffff" : "#f3f3f3"; weight = "bold"; }
+
+      rowsData.push([prefix, cNode.paiaNette, pResoC, cNode.fatturatoNetto, pC, oNode.paiaNette, pResoO, oNode.fatturatoNetto, pO, vF, vP]);
+      rowStyles.push({ bg, weight, style, color, depth });
+
+      if (depth < maxDepth - 1) traverse(cNode.kids, oNode.kids, depth + 1);
+    });
+  }
+
+  traverse(currentTree.tree, oldTree.tree, 0);
+
+  if (rowsData.length > 0) {
+    // 1. SISTEMA DI SICUREZZA ESPANSIONE FOGLIO: Previene l'errore Out of Bounds / Bug Ultima Riga
+    const requiredRows = startRow + rowsData.length + 5; 
+    if (sheet.getMaxRows() < requiredRows) {
+      sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
+    }
+
+    const range = sheet.getRange(startRow, 1, rowsData.length, 11);
+    range.setValues(rowsData);
+    
+    const backgrounds = rowStyles.map(r => Array(11).fill(r.bg));
+    const weights = rowStyles.map(r => Array(11).fill(r.weight));
+    const styles = rowStyles.map(r => Array(11).fill(r.style));
+    const colors = rowStyles.map(r => Array(11).fill(r.color));
+    
+    range.setBackgrounds(backgrounds);
+    range.setFontWeights(weights);
+    range.setFontStyles(styles);
+    range.setFontColors(colors);
+    
+    // 2. SISTEMA DI SICUREZZA API CHUNKING: Ottimizzato per prestazioni velocistiche
+    const groupBlocks = []; // { start: rowIndex, count: nRighe, depth: livello }
+
+    for (let d = 1; d < maxDepth; d++) {
+      let blockStart = -1, blockCount = 0;
+      for (let i = 0; i < rowStyles.length; i++) {
+        if (rowStyles[i].depth >= d) {
+          if (blockStart === -1) { blockStart = i; blockCount = 1; }
+          else { blockCount++; }
+        } else {
+          if (blockStart !== -1) {
+            groupBlocks.push({ start: blockStart, count: blockCount, depth: d });
+            blockStart = -1; blockCount = 0;
+          }
+        }
+      }
+      if (blockStart !== -1) {
+        groupBlocks.push({ start: blockStart, count: blockCount, depth: d });
+      }
+    }
+
+    // Applica tutti i blocchi con flush ogni 50 chiamate (invece di 100)
+    // 50 è il punto di equilibrio tra memoria e round-trip per dataset medi
+    let apiCalls = 0;
+    groupBlocks.forEach(b => {
+      sheet.getRange(startRow + b.start, 1, b.count, 1).shiftRowGroupDepth(1);
+      apiCalls++;
+      if (apiCalls % 50 === 0) SpreadsheetApp.flush();
+    });
+    SpreadsheetApp.flush(); 
+    
+    startRow += rowsData.length;
+  }
+  
+  const totalDataRows = startRow - firstDataRow;
+  if (totalDataRows > 0) {
+    /**
+    sheet.getRange(firstDataRow, 2, totalDataRows, 1).setNumberFormat('#,##0');
+    sheet.getRange(firstDataRow, 6, totalDataRows, 1).setNumberFormat('#,##0');
+    sheet.getRange(firstDataRow, 3, totalDataRows, 1).setNumberFormat('0.00%').setFontColor("#9c0006");
+    sheet.getRange(firstDataRow, 7, totalDataRows, 1).setNumberFormat('0.00%').setFontColor("#9c0006");
+    sheet.getRange(firstDataRow, 4, totalDataRows, 1).setNumberFormat('€ #,##0.00');
+    sheet.getRange(firstDataRow, 8, totalDataRows, 1).setNumberFormat('€ #,##0.00');
+    sheet.getRange(firstDataRow, 5, totalDataRows, 1).setNumberFormat('0.00%');
+    sheet.getRange(firstDataRow, 9, totalDataRows, 1).setNumberFormat('0.00%');
+    sheet.getRange(firstDataRow, 10, totalDataRows, 2).setNumberFormat('0.00%').setFontWeight('bold');
+    **/
+    const fmtMap = {
+      1:  '#,##0',     // col 2 → indice 1
+      2:  '0.00%',     // col 3
+      3:  '€ #,##0.00',// col 4
+      4:  '0.00%',     // col 5
+      5:  '#,##0',     // col 6
+      6:  '0.00%',     // col 7
+      7:  '€ #,##0.00',// col 8
+      8:  '0.00%',     // col 9
+      9:  '0.00%',     // col 10
+      10: '0.00%'      // col 11
+    };
+    const redCols = new Set([2, 6]); // indici 0-based dentro il range (col 3 e 7 del foglio)
+    const boldCols = new Set([9, 10]);
+
+    const numFormats = [];
+    const fontColors = [];
+    const fontWeights = [];
+
+    for (let r = 0; r < totalDataRows; r++) {
+      const fmtRow = [], colorRow = [], weightRow = [];
+      for (let c = 0; c <= 10; c++) {
+        fmtRow.push(fmtMap[c] || '@');
+        colorRow.push(redCols.has(c) ? '#9c0006' : '#000000');
+        weightRow.push(boldCols.has(c) ? 'bold' : 'normal');
+      }
+      numFormats.push(fmtRow);
+      fontColors.push(colorRow);
+      fontWeights.push(weightRow);
+    }
+
+    // 3 chiamate invece di 9+
+    const fullRange = sheet.getRange(firstDataRow, 1, totalDataRows, 11);
+    fullRange.setNumberFormats(numFormats);
+    fullRange.setFontColors(fontColors);
+    fullRange.setFontWeights(fontWeights);
+  }
+
+  sheet.collapseAllRowGroups();
+  return startRow + 2;
+}

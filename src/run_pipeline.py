@@ -57,7 +57,7 @@ def main():
             df_vendite_daily['genere'] = 'NON CLASSIFICATO'
             df_vendite_daily['descrizione'] = '-'
             
-        df_master_vendite = update_master_dataset(df_vendite_daily, MASTER_VENDITE_PATH, ['ordine_id', 'sku_full'])
+        df_master_vendite = update_master_dataset(df_vendite_daily, MASTER_VENDITE_PATH, ['ordine_id', 'sku_full', 'stato'])
     elif os.path.exists(MASTER_VENDITE_PATH):
         print("\n⚠️ Nessun nuovo file vendite trovato. Utilizzo dello storico...")
         df_master_vendite = pd.read_parquet(MASTER_VENDITE_PATH)

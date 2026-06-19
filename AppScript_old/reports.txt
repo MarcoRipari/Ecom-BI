@@ -1,0 +1,526 @@
+// =========================================================================================
+// MODULI DI GENERAZIONE DEI TAB DI OUTPUT (reports.gs)
+// =========================================================================================
+
+function generateDashboardModulo(sheet, currentData, anagrafica, perimetroScelto) {
+  const yCurr = new Date().getFullYear();
+
+  const m = calculateGlobalMetricsDetailed(currentData);
+  let headers, rows, numCols;
+  
+  if (perimetroScelto === '2') {
+    numCols = 2; headers = ["METRICA", "DIRETTI"];
+    rows = [
+      ["FATTURATO LORDO (€)", m.dir.lordo],
+      ["FATTURATO NETTO (€)", m.dir.netto],
+      ["TOTALE ORDINI", m.dir.ordini],
+      ["PAIA SPEDITE", m.dir.paiaSped],
+      ["PAIA RESE", m.dir.paiaRes],
+      ["PAIA NETTE", m.dir.paiaNet]
+    ];
+  } else if (perimetroScelto === '3') {
+    numCols = 2; headers = ["METRICA", "ESTERNI"];
+    rows = [
+      ["FATTURATO LORDO (€)", m.est.lordo],
+      ["FATTURATO NETTO (€)", m.est.netto],
+      ["TOTALE ORDINI", m.est.ordini],
+      ["PAIA SPEDITE", m.est.paiaSped],
+      ["PAIA RESE", m.est.paiaRes],
+      ["PAIA NETTE", m.est.paiaNet]
+    ];
+  } else {
+    numCols = 4; headers = ["METRICA", "TOTALE", "DIRETTI", "ESTERNI"];
+    rows = [
+      ["FATTURATO LORDO (€)", m.tot.lordo, m.dir.lordo, m.est.lordo],
+      ["FATTURATO NETTO (€)", m.tot.netto, m.dir.netto, m.est.netto],
+      ["TOTALE ORDINI", m.tot.ordini, m.dir.ordini, m.est.ordini],
+      ["PAIA SPEDITE", m.tot.paiaSped, m.dir.paiaSped, m.est.paiaSped],
+      ["PAIA RESE", m.tot.paiaRes, m.dir.paiaRes, m.est.paiaRes],
+      ["PAIA NETTE", m.tot.paiaNet, m.dir.paiaNet, m.est.paiaNet]
+    ];
+  }
+  
+  sheet.getRange(1, 1, 1, 4).merge().setValue('📈 DETTAGLIO FATTURATO ' + yCurr).setBackground("#b6d7a8").setFontWeight('bold').setHorizontalAlignment("center");
+  sheet.getRange(2, 1, 1, numCols).setValues([headers]).setBackground("#eeeeee").setFontWeight('bold').setHorizontalAlignment('center');
+  sheet.getRange(3, 1, 6, numCols).setValues(rows).setFontWeight('bold');
+  
+  if (perimetroScelto === '2' || perimetroScelto === '3') {
+    sheet.getRange("B3:B4").setNumberFormat('€ #,##0.00'); 
+    sheet.getRange("B5:B8").setNumberFormat('#,##0');
+  } else {
+    sheet.getRange("B3:D4").setNumberFormat('€ #,##0.00'); 
+    sheet.getRange("B5:D8").setNumberFormat('#,##0');
+  }
+
+  let startRow = 11; // Riga di partenza aumentata per contenere lo specchietto a 6 metriche
+  startRow = drawSingleYearTable(sheet, startRow, "📦 DETTAGLIO MARKETPLACE", aggregateByKey(currentData, 'mkp'), yCurr, 'fatturatoNetto');
+  startRow = drawSingleYearTable(sheet, startRow, "🌍 DETTAGLIO NAZIONI", aggregateByKey(currentData, 'nazione'), yCurr, 'fatturatoNetto');
+  startRow = drawSingleYearTable(sheet, startRow, "📈 DETTAGLIO COLLEZIONI", aggregateByKey(currentData, 'clzMappata'), yCurr, 'paiaNette');
+
+  sheet.getRange(startRow, 1, 1, 8).merge().setValue("🏆 TOP ARTICOLI ANNO CORRENTE").setBackground("#ead1dc").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+  const topHeaders = ["Articolo", "Foto", "Collezione", "Paia Spedite", "Paia Rese", "% Reso", "Paia Nette", "Fatturato Netto (€)"];
+  sheet.getRange(startRow, 1, 1, 8).setValues([topHeaders]).setBackground("#eeeeee").setFontWeight('bold').setHorizontalAlignment("center");
+  startRow++;
+
+  const aggSku = aggregateByKey(currentData, 'sku13');
+  const sortedSkus = Object.keys(aggSku.map).sort((a,b) => aggSku.map[b].paiaNette - aggSku.map[a].paiaNette).slice(0, 5000);
+
+  const skuRows = [];
+  sortedSkus.forEach(sku => {
+    const item = aggSku.map[sku];
+    const desc = anagrafica[sku] ? anagrafica[sku].desc : (anagrafica[sku.substring(0,7)] ? anagrafica[sku.substring(0,7)].desc : "-");
+    const percReso = item.paiaSpedite > 0 ? item.paiaRese / item.paiaSpedite : 0;
+    skuRows.push([
+      sku.toUpperCase() + "\n" + desc, `=IMAGE("https://repository.falc.biz/fal001${item.img}-1.jpg";4;221;153)`, item.clzOriginale,
+      item.paiaSpedite, item.paiaRese, percReso, item.paiaNette, item.fatturatoNetto
+    ]);
+  });
+
+  if (skuRows.length > 0) {
+    const r = skuRows.length;
+
+    const colFmt   = ['@', '@', '@', '#,##0', '#,##0', '0.00%', '#,##0', '€ #,##0.00'];
+    const colColor = ['#000000', '#000000', '#000000', '#000000', '#000000', '#9c0006', '#000000', '#000000'];
+    const colAlign = ['center', 'center', 'left', 'center', 'center', 'center', 'center', 'center'];
+
+    // Costanti enum richieste da setWrapStrategies
+    const WRAP     = SpreadsheetApp.WrapStrategy.WRAP;
+    const OVERFLOW = SpreadsheetApp.WrapStrategy.OVERFLOW;
+    const colWrap  = [WRAP, OVERFLOW, OVERFLOW, OVERFLOW, OVERFLOW, OVERFLOW, OVERFLOW, OVERFLOW];
+
+    const fmtGrid   = Array.from({ length: r }, () => colFmt);
+    const colorGrid = Array.from({ length: r }, () => colColor);
+    const alignGrid = Array.from({ length: r }, () => colAlign);
+    const wrapGrid  = Array.from({ length: r }, () => colWrap);
+
+    const range = sheet.getRange(startRow, 1, r, 8);
+    range.setValues(skuRows);
+    range.setVerticalAlignments(Array.from({ length: r }, () => Array(8).fill('middle')));
+    range.setNumberFormats(fmtGrid);
+    range.setFontColors(colorGrid);
+    range.setHorizontalAlignments(alignGrid);
+    range.setWrapStrategies(wrapGrid);
+
+    setRowHeightsBatch(sheet, startRow, r, 75);
+  }
+  sheet.setColumnWidth(1, 280); sheet.setColumnWidths(2, 8, 200);
+}
+
+function generateComparativaModulo(sheet, currentData, oldData, perimetroScelto) {
+  const yCurr = new Date().getFullYear(); const yOld = yCurr - 1;
+
+  let startRow = 1;
+  startRow = drawGlobalTotalsTable(sheet, startRow, currentData, oldData, yCurr, yOld, perimetroScelto);
+  startRow = drawComparativeTable(sheet, startRow, "📦 DETTAGLIO PER MARKETPLACE", aggregateByKey(currentData, 'mkp'), aggregateByKey(oldData, 'mkp'), yCurr, yOld, 'fatturatoNetto');
+  startRow = drawComparativeTable(sheet, startRow, "🌍 DETTAGLIO PER NAZIONE", aggregateByKey(currentData, 'nazione'), aggregateByKey(oldData, 'nazione'), yCurr, yOld, 'fatturatoNetto');
+  startRow = drawComparativeTable(sheet, startRow, "📈 DETTAGLIO PER COLLEZIONE", aggregateByKey(currentData, 'clzMappata'), aggregateByKey(oldData, 'clzMappata'), yCurr, yOld, 'paiaNette');
+  
+  sheet.setColumnWidth(1, 250); sheet.setColumnWidths(2, 12, 110);
+}
+
+function generateComparativaCodiciModulo(sheet, currentData, oldData, anagrafica) {
+  const yCurr = new Date().getFullYear(); const yOld = yCurr - 1;
+  
+  const mapData = {};
+  const aggregate = (dataArray, isCurrent) => {
+    dataArray.forEach(row => {
+      const cod7 = row.sku7;
+      if (!mapData[cod7]) mapData[cod7] = { pCNet:0, pCSped:0, pCRes:0, fC:0, pONet:0, pOSped:0, pORes:0, fO:0, clz: row.clzOriginale, img: row.sku13.toLowerCase() };
+      if (isCurrent) { mapData[cod7].pCNet += row.paiaNette; mapData[cod7].pCSped += row.paiaSpedite; mapData[cod7].pCRes += row.paiaRese; mapData[cod7].fC += row.nettoNetto; } 
+      else { mapData[cod7].pONet += row.paiaNette; mapData[cod7].pOSped += row.paiaSpedite; mapData[cod7].pORes += row.paiaRese; mapData[cod7].fO += row.nettoNetto; }
+    });
+  };
+
+  aggregate(currentData, true); aggregate(oldData, false);
+
+  const headers = ["Foto", "Codice", "Collezione", "Descrizione", "Paia Net "+yCurr, "% Reso "+yCurr, "Fatt. Net "+yCurr, "Paia Net "+yOld, "% Reso "+yOld, "Fatt. Net "+yOld, "VAR% FATT"];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setBackground("#eeeeee").setFontWeight('bold').setHorizontalAlignment("center");
+
+  const rows = [];
+  Object.keys(mapData).forEach(cod => {
+    const d = mapData[cod];
+    const desc = anagrafica[cod] ? anagrafica[cod].desc : "-";
+    const varFatt = d.fO !== 0 ? (d.fC / d.fO) - 1 : (d.fC > 0 ? 1 : 0);
+    const pResoC = d.pCSped > 0 ? d.pCRes / d.pCSped : 0;
+    const pResoO = d.pOSped > 0 ? d.pORes / d.pOSped : 0;
+    rows.push([ `=IMAGE("https://repository.falc.biz/fal001${d.img}-1.jpg")`, cod, d.clz, desc, d.pCNet, pResoC, d.fC, d.pONet, pResoO, d.fO, varFatt ]);
+  });
+
+  rows.sort((a, b) => b[6] - a[6]); // Ordina per Fatturato Netto Corrente
+
+  /**
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, 2).setHorizontalAlignment("center");
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows).setVerticalAlignment("middle");
+    sheet.getRange(2, 2, rows.length, 1).setNumberFormat('@');
+    sheet.getRange(2, 5, rows.length, 1).setNumberFormat('#,##0'); sheet.getRange(2, 8, rows.length, 1).setNumberFormat('#,##0');
+    sheet.getRange(2, 5, rows.length, 7).setHorizontalAlignment("center");
+    sheet.getRange(2, 6, rows.length, 1).setNumberFormat('0.00%').setFontColor("#9c0006"); sheet.getRange(2, 9, rows.length, 1).setNumberFormat('0.00%').setFontColor("#9c0006");
+    sheet.getRange(2, 7, rows.length, 1).setNumberFormat('€ #,##0.00'); sheet.getRange(2, 10, rows.length, 1).setNumberFormat('€ #,##0.00');
+    sheet.getRange(2, 11, rows.length, 1).setNumberFormat('0.00%').setFontWeight('bold');
+    sheet.setRowHeights(2, rows.length, 75);
+  }
+  **/
+  if (rows.length > 0) {
+    const r = rows.length;
+    const nCols = headers.length; // 11 colonne
+
+    // Mappe formato per colonna (0-based nel range)
+    // Col: 0=Foto, 1=Codice, 2=Clz, 3=Desc, 4=PaieNetC, 5=ResoC, 6=FattC, 7=PaieNetO, 8=ResoO, 9=FattO, 10=VarFatt
+    const colFmt   = ['@','@','@','@','#,##0','0.00%','€ #,##0.00','#,##0','0.00%','€ #,##0.00','0.00%'];
+    const colColor = ['#000000','#000000','#000000','#000000','#000000','#9c0006','#000000','#000000','#9c0006','#000000','#000000'];
+    const colWeight= ['normal','normal','normal','normal','normal','normal','normal','normal','normal','normal','bold'];
+
+    const fmtGrid = Array.from({length: r}, () => colFmt);
+    const colorGrid = Array.from({length: r}, () => colColor);
+    const weightGrid = Array.from({length: r}, () => colWeight);
+
+    const dataRange = sheet.getRange(2, 1, r, nCols);
+    dataRange.setValues(rows).setVerticalAlignment("middle");
+    dataRange.setNumberFormats(fmtGrid);
+    dataRange.setFontColors(colorGrid);
+    dataRange.setFontWeights(weightGrid);
+    dataRange.setHorizontalAlignments(
+      Array.from({length: r}, () => ['center','center','left','left','center','center','center','center','center','center','center'])
+    );
+
+    sheet.setRowHeights(2, r, 75); // Vedi punto 2 per come ottimizzare anche questo
+  }
+
+  sheet.setColumnWidth(1, 70); sheet.setColumnWidth(4, 250); sheet.setColumnWidths(5, headers.length - 4, 100); sheet.setColumnWidth(3, 250);
+}
+
+function generateComparazioneCollezioniModulo(sheet, currentData, oldData) {
+  const yCurr = new Date().getFullYear(); const yOld = yCurr - 1;
+  let startRow = 1;
+  startRow = drawCustomHierarchicalTable(sheet, startRow, "1. ANALISI PER BRAND / COLLEZIONE", aggregateHierarchicalCustom(currentData, ['clzMappata', 'clzOriginale']), aggregateHierarchicalCustom(oldData, ['clzMappata', 'clzOriginale']), yCurr, yOld, ["Brand", "Collezione Originale"]);
+  startRow = drawCustomHierarchicalTable(sheet, startRow, "2. DETTAGLIO PER MARKETPLACE (4 Livelli)", aggregateHierarchicalCustom(currentData, ['clzMappata', 'clzOriginale', 'mkp', 'nazione']), aggregateHierarchicalCustom(oldData, ['clzMappata', 'clzOriginale', 'mkp', 'nazione']), yCurr, yOld, ["Brand", "Collezione", "Marketplace", "Nazione"]);
+  startRow = drawCustomHierarchicalTable(sheet, startRow, "3. DETTAGLIO PER NAZIONE (4 Livelli)", aggregateHierarchicalCustom(currentData, ['clzMappata', 'clzOriginale', 'nazione', 'mkp']), aggregateHierarchicalCustom(oldData, ['clzMappata', 'clzOriginale', 'nazione', 'mkp']), yCurr, yOld, ["Brand", "Collezione", "Nazione", "Marketplace"]);
+  sheet.setColumnWidth(1, 400); sheet.setColumnWidths(2, 10, 110);
+}
+
+function generateCarryoverModulo(sheet, currentData, oldData) {
+  const yCurr = new Date().getFullYear(); const yOld = yCurr - 1;
+  const carryoverData = filterCarryoverData(currentData, oldData);
+  let startRow = 1;
+  startRow = drawCustomHierarchicalTable(sheet, startRow, "1. CARRYOVER BRAND / COLLEZIONE", aggregateHierarchicalCustom(carryoverData.curr, ['clzMappata', 'clzOriginale']), aggregateHierarchicalCustom(carryoverData.old, ['clzMappata', 'clzOriginale']), yCurr, yOld, ["Brand", "Collezione Originale"]);
+  startRow = drawCustomHierarchicalTable(sheet, startRow, "2. CARRYOVER MARKETPLACE", aggregateHierarchicalCustom(carryoverData.curr, ['clzMappata', 'clzOriginale', 'mkp', 'nazione']), aggregateHierarchicalCustom(carryoverData.old, ['clzMappata', 'clzOriginale', 'mkp', 'nazione']), yCurr, yOld, ["Brand", "Collezione", "Marketplace", "Nazione"]);
+  startRow = drawCustomHierarchicalTable(sheet, startRow, "3. CARRYOVER NAZIONE", aggregateHierarchicalCustom(carryoverData.curr, ['clzMappata', 'clzOriginale', 'nazione', 'mkp']), aggregateHierarchicalCustom(carryoverData.old, ['clzMappata', 'clzOriginale', 'nazione', 'mkp']), yCurr, yOld, ["Brand", "Collezione", "Nazione", "Marketplace"]);
+  sheet.setColumnWidth(1, 400); sheet.setColumnWidths(2, 10, 110);
+}
+
+function generateCarryoverCodiciModulo(sheet, currentData, oldData, anagrafica) {
+  const carryoverData = filterCarryoverData(currentData, oldData);
+  generateComparativaCodiciModulo(sheet, carryoverData.curr, carryoverData.old, anagrafica);
+}
+
+function generateTaglieModulo(sheet, currentData) {
+  const byBrand = aggregateByTagliaPerBrand(currentData);
+  let startRow = 1;
+
+  // Ordina i brand alfabeticamente
+  const brands = Object.keys(byBrand).sort();
+
+  brands.forEach(brand => {
+    const sottoGruppi = Object.keys(byBrand[brand]).sort();
+    if (sottoGruppi.length === 0) return;
+
+    let brandStartRow = startRow;
+    // Lasciamo provvisoriamente la riga per il Brand Header (lo uniremo alla fine del ciclo)
+    startRow++; 
+
+    let currentCol = 1;
+    let maxRowInBrand = startRow;
+
+    sottoGruppi.forEach(gruppo => {
+      const tagMap = byBrand[brand][gruppo];
+      
+      // Ordina le taglie numericamente
+      const taglie = Object.keys(tagMap).sort((a, b) => {
+        const na = parseInt(a), nb = parseInt(b);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        if (!isNaN(na)) return -1;
+        if (!isNaN(nb)) return 1;
+        return a.localeCompare(b);
+      });
+
+      const totGruppo = taglie.reduce((s, t) => s + tagMap[t].paiaNette, 0);
+
+      // 1. INTESTAZIONE DEL GENERE (Blu Classico) - Larghezza fissa di 5 colonne
+      sheet.getRange(startRow, currentCol, 1, 5)
+        .merge().setValue(`👥 ${gruppo}`)
+        .setBackground("#4a86e8").setFontColor("#ffffff")
+        .setFontWeight('bold').setHorizontalAlignment("center");
+
+      // 2. HEADER COLONNE SPECIFICO
+      const headers = ["Taglia", "Paia Nette", `% su ${gruppo}`, "% Reso", "Fatturato Netto (€)"];
+      sheet.getRange(startRow + 1, currentCol, 1, headers.length)
+        .setValues([headers])
+        .setBackground("#eeeeee").setFontWeight('bold').setHorizontalAlignment("center");
+
+      // 3. RIGHE DATI DELLE TAGLIE
+      const rows = taglie.map(t => {
+        const d = tagMap[t];
+        const percSuGruppo = totGruppo > 0 ? d.paiaNette / totGruppo : 0;
+        const percReso     = d.paiaSpedite > 0 ? d.paiaRese / d.paiaSpedite : 0;
+        return [t, d.paiaNette, percSuGruppo, percReso, d.fatturatoNetto];
+      });
+
+      if (rows.length > 0) {
+        const r = sheet.getRange(startRow + 2, currentCol, rows.length, 5);
+        r.setValues(rows).setHorizontalAlignment("center");
+        
+        // Formattazione numerica applicata dinamicamente alle colonne correnti
+        sheet.getRange(startRow + 2, currentCol + 1, rows.length, 1).setNumberFormat('#,##0');
+        sheet.getRange(startRow + 2, currentCol + 2, rows.length, 1).setNumberFormat('0.00%');
+        sheet.getRange(startRow + 2, currentCol + 3, rows.length, 1).setNumberFormat('0.00%').setFontColor("#9c0006");
+        sheet.getRange(startRow + 2, currentCol + 4, rows.length, 1).setNumberFormat('€ #,##0.00');
+      }
+
+      // Tracciamento della riga massima per evitare sovrapposizioni verticali nel prossimo brand
+      let localMaxRow = startRow + 2 + rows.length;
+      if (localMaxRow > maxRowInBrand) {
+        maxRowInBrand = localMaxRow;
+      }
+
+      // Spostamento a destra: 5 colonne di dati + 1 colonna vuota di separazione
+      currentCol += 5;
+    });
+
+    // 4. DISEGNO DEL MACRO-BRAND HEADER (Esteso su tutte le colonne utilizzate dai generi)
+    const totalColsUsed = currentCol - 1; 
+    sheet.getRange(brandStartRow, 1, 1, totalColsUsed)
+      .merge().setValue(`📦 ${brand.toUpperCase()}`)
+      .setBackground("#2b2b2b").setFontColor("#ffffff")
+      .setFontWeight('bold').setHorizontalAlignment("center").setFontSize(14);
+
+    // Il prossimo brand partirà sotto alla sotto-tabella più lunga di questo blocco
+    startRow = maxRowInBrand + 2; 
+  });
+
+  // 5. REGOLAZIONE LARGHEZZA COLONNE (Colonne dati ampie, colonne di separazione strette)
+  sheet.setFrozenRows(0);
+  sheet.setColumnWidths(1, 15, 115); // Colonne dati standard
+}
+
+/**
+ * Modulo 8: Resi (Rivoluzionato per attingere al currentData già elaborato e velocissimo)
+ */
+function generateResiModulo(sheet, currentData, anagrafica) {
+  sheet.getRange("A1").setValue("🔄 ANALISI RESI COMPLETA SUL CORRENTE").setFontSize(18).setFontWeight('bold');
+  const aggData = aggregateByKey(currentData, 'clzMappata');
+  
+  const headers = ["Brand/Collezione", "Paia Spedite", "Paia Rese", "% Reso", "Fatturato Netto", "Status"];
+  sheet.getRange(3, 1, 1, 6).setValues([headers]).setBackground("#2b2b2b").setFontColor("white").setFontWeight("bold");
+  const rows = [];
+  
+  // Utilizziamo un default universale 0.3 (30%) di soglia tolleranza
+  Object.keys(aggData.map).forEach(clz => {
+    const v = aggData.map[clz].paiaSpedite;
+    const r = aggData.map[clz].paiaRese;
+    const fattNetto = aggData.map[clz].fatturatoNetto;
+    const percReso = v > 0 ? r / v : 0;
+    const soglia = 0.30; 
+
+    let status = "🟢 OTTIMO";
+    if (percReso >= 1) status = "🔴 CRITICO (100%)";
+    else if (percReso > 0.7) status = "🔴 CRITICO";
+    else if (percReso > (soglia + 0.1)) status = "🟠 PESSIMO";
+    else if (percReso > soglia) status = "🟡 MONITORARE";
+    else if (percReso > (soglia * 0.8)) status = "🔵 STABILE";
+    rows.push(["📁 " + clz, v, r, percReso, fattNetto, status]);
+  });
+  
+  rows.sort((a, b) => b[3] - a[3]);
+  if (rows.length > 0) {
+    sheet.getRange(4, 1, rows.length, 6).setValues(rows);
+    sheet.getRange(4, 4, rows.length, 1).setNumberFormat("0.00%").setFontColor("#9c0006");
+    sheet.getRange(4, 5, rows.length, 1).setNumberFormat('€ #,##0.00');
+    sheet.setColumnWidth(1, 250); sheet.setColumnWidths(2, 6, 120);
+  }
+}
+
+/**
+ * Modulo 9: Sell-Through Totale Data-Driven
+ */
+function generateSellThroughModulo(sheet, currentData, sellInRaw, anagrafica, lunghezza, label) {
+  
+  // 1. Inizializzazione Mappe e Set dal BUYING
+  const sellInMap = {};
+  const sellInSku13 = {};
+  const validSku13 = new Set();
+  
+  sellInRaw.forEach(item => {
+    validSku13.add(item.sku13);
+    const chiave = item.sku13.substring(0, lunghezza);
+    sellInMap[chiave] = (sellInMap[chiave] || 0) + item.qty;
+    if (!sellInSku13[chiave]) sellInSku13[chiave] = item.sku13.toLowerCase();
+  });
+
+  const dataMap = {};
+  Object.keys(sellInMap).forEach(k => {
+    dataMap[k] = {
+      codiceFoto: sellInSku13[k],
+      totale:   { paiaNette: 0, fattNetto: 0, settimane: new Set(), dataMin: null, dataMax: null },
+      inseason: { paiaNette: 0, fattNetto: 0, settimane: new Set() },
+      promo:    { paiaNette: 0, fattNetto: 0, settimane: new Set() }
+    };
+  });
+
+  let totPaiaGlobale = 0;
+
+  // 2. Filtriamo e Aggreghiamo il DATASET sulle Paia Nette
+  currentData.forEach(row => {
+    if (!validSku13.has(row.sku13)) return; 
+    
+    const dVendita = row.dataVendita;
+    if (!dVendita) return; // Salta se la data non è valida
+    
+    const chiave = row.sku13.substring(0, lunghezza);
+    if (!dataMap[chiave]) return;
+
+    const d = dataMap[chiave];
+    const isoWeek = getISOWeekKey(dVendita);
+    
+    // Il flag isPromo è stato calcolato dal motore con la tua formula millimetrica!
+    const vendInPromo = row.isPromo; 
+    
+    // Aggiorna Totali
+    d.totale.paiaNette += row.paiaNette;
+    d.totale.fattNetto += row.nettoNetto;
+    if (row.paiaNette > 0) d.totale.settimane.add(isoWeek); 
+    
+    if (!d.totale.dataMin || dVendita < d.totale.dataMin) d.totale.dataMin = dVendita;
+    if (!d.totale.dataMax || dVendita > d.totale.dataMax) d.totale.dataMax = dVendita;
+    totPaiaGlobale += row.paiaNette;
+
+    // Aggiorna Promo / In-Season
+    if (vendInPromo) {
+      d.promo.paiaNette += row.paiaNette;
+      d.promo.fattNetto += row.nettoNetto;
+      if (row.paiaNette > 0) d.promo.settimane.add(isoWeek);
+    } else {
+      d.inseason.paiaNette += row.paiaNette;
+      d.inseason.fattNetto += row.nettoNetto;
+      if (row.paiaNette > 0) d.inseason.settimane.add(isoWeek);
+    }
+  });
+
+  /** 3. Ordinamento e Preparazione Griglia [Sort per ST / Fatturato]
+  const validKeys = Object.keys(sellInMap).filter(k => sellInMap[k] > 0);
+  validKeys.sort((a, b) => {
+    const stA = sellInMap[a] > 0 ? dataMap[a].totale.paiaNette / sellInMap[a] : 0;
+    const stB = sellInMap[b] > 0 ? dataMap[b].totale.paiaNette / sellInMap[b] : 0;
+    if (stB !== stA) return stB - stA;
+    return dataMap[b].totale.fattNetto - dataMap[a].totale.fattNetto;
+  });
+  **/
+  // 3. Ordinamento e Preparazione Griglia [Sort per PaiaNette / Fatturato]
+  const validKeys = Object.keys(sellInMap).filter(k => sellInMap[k] > 0);
+  validKeys.sort((a, b) => {
+    const paiaA = dataMap[a] ? dataMap[a].totale.paiaNette : 0;
+    const paiaB = dataMap[b] ? dataMap[b].totale.paiaNette : 0;
+    
+    // 1° Criterio: Ordina per Paia Nette Vendute (Decrescente)
+    if (paiaB !== paiaA) return paiaB - paiaA;
+    
+    // 2° Criterio (Tie-breaker): In caso di parità di paia, ordina per Fatturato Netto
+    const fattA = dataMap[a] ? dataMap[a].totale.fattNetto : 0;
+    const fattB = dataMap[b] ? dataMap[b].totale.fattNetto : 0;
+    return fattB - fattA;
+  });
+
+  const finalData = [];
+  
+  validKeys.forEach(k => {
+    const d = dataMap[k];
+    const paieAcq = sellInMap[k];
+    const anag = anagrafica[k] || anagrafica[k.substring(0,7)] || { clz: "-", desc: "-", serie: "-" };
+    
+    // Metriche TOTALE
+    const totVend = d.totale.paiaNette;
+    const totResid = Math.max(0, paieAcq - totVend);
+    const totST = paieAcq > 0 ? Math.min(1, totVend / paieAcq) : 0;
+    const totSett = d.totale.settimane.size;
+    const totVel = totSett > 0 ? totVend / totSett : 0;
+    const totPMedio = totVend > 0 ? d.totale.fattNetto / totVend : 0;
+
+    // Metriche IN-SEASON
+    const isVend = d.inseason.paiaNette;
+    const isResid = Math.max(0, paieAcq - isVend);
+    const isST = paieAcq > 0 ? isVend / paieAcq : 0;
+    const isSett = d.inseason.settimane.size;
+    const isVel = isSett > 0 ? isVend / isSett : 0;
+    const isPMedio = isVend > 0 ? d.inseason.fattNetto / isVend : 0;
+
+    // Metriche PROMO
+    const prVend = d.promo.paiaNette;
+    const prResid = Math.max(0, paieAcq - prVend);
+    const prST = paieAcq > 0 ? prVend / paieAcq : 0;
+    const prSett = d.promo.settimane.size;
+    const prVel = prSett > 0 ? prVend / prSett : 0;
+    const prPMedio = prVend > 0 ? d.promo.fattNetto / prVend : 0;
+
+    const percPaiaGlobale = totPaiaGlobale > 0 ? totVend / totPaiaGlobale : 0;
+
+    finalData.push([
+      `=IMAGE("https://repository.falc.biz/fal001${d.codiceFoto}-1.jpg")`,
+      k, anag.clz, anag.serie, anag.desc,
+      
+      paieAcq, totVend, totResid, totST, d.totale.fattNetto, totPMedio, totVel, totSett,
+      paieAcq, isVend,  isResid,  isST,  d.inseason.fattNetto, isPMedio, isVel, isSett,
+      paieAcq, prVend,  prResid,  prST,  d.promo.fattNetto,  prPMedio, prVel, prSett,
+      
+      percPaiaGlobale, d.totale.dataMin || "", d.totale.dataMax || ""
+    ]);
+  });
+
+  // 4. Stampa su Foglio e Formattazione
+  const nCols = 32;
+  const hGroups = ["","","","","", "TOTALE NETTO","","","","","","","", "IN-SEASON NETTO","","","","","","","", "PROMO NETTO","","","","","","","", "","",""];
+  const hCols = ["Foto","Codice","Collezione","Serie","Descrizione", "Acq.","Vend.","Resid.","ST %","Fatt. Netto","P. Medio","Vel/w","Sett", "Acq.","Vend.","Resid.","ST %","Fatt. Netto","P. Medio","Vel/w","Sett", "Acq.","Vend.","Resid.","ST %","Fatt. Netto","P. Medio","Vel/w","Sett", "% Paia","1° Vend","Ultima"];
+  
+  sheet.getRange(1, 1, 1, nCols).setValues([hGroups]);
+  sheet.getRange(2, 1, 1, nCols).setValues([hCols]).setFontWeight('bold').setHorizontalAlignment("center");
+  
+  // Colori Intestazioni
+  sheet.getRange(1, 1, 2, 5).setBackground("#000000").setFontColor("#ffffff");
+  sheet.getRange(1, 30, 2, 3).setBackground("#000000").setFontColor("#ffffff");
+  sheet.getRange(1, 6, 2, 8).setBackground("#47804d").setFontColor("#ffffff"); // Totale (Verde)
+  sheet.getRange(1, 14, 2, 8).setBackground("#2e6da4").setFontColor("#ffffff"); // In-Season (Blu)
+  sheet.getRange(1, 22, 2, 8).setBackground("#a04040").setFontColor("#ffffff"); // Promo (Rosso)
+
+  if (finalData.length > 0) {
+    sheet.getRange(3, 2, finalData.length, 1).setNumberFormat('@'); // Codice come Testo
+    sheet.getRange(3, 1, finalData.length, nCols).setValues(finalData);
+    
+    const r = finalData.length;
+    // Formati Percentuali
+    [9, 17, 25, 30].forEach(c => sheet.getRange(3, c, r, 1).setNumberFormat('0.00%'));
+    // Formati Valuta
+    [10, 11, 18, 19, 26, 27].forEach(c => sheet.getRange(3, c, r, 1).setNumberFormat('€ #,##0.00'));
+    // Formati Velocità
+    [12, 20, 28].forEach(c => sheet.getRange(3, c, r, 1).setNumberFormat('#,##0.0'));
+    // Formati Date
+    sheet.getRange(3, 31, r, 2).setNumberFormat('dd/MM/yyyy');
+
+    sheet.setRowHeights(3, r, 75);
+    sheet.getRange(3, 1, r, nCols).setVerticalAlignment("middle");
+    sheet.getRange(3, 1, r, 2).setHorizontalAlignment("center");
+    sheet.getRange(3, 4, r, 1).setHorizontalAlignment("center");
+    sheet.getRange(3, 6, r, nCols).setHorizontalAlignment("center");
+    sheet.getRange(1, 6, 1, 8).merge().setFontWeight("bold").setVerticalAlignment("middle").setHorizontalAlignment("center");
+    sheet.getRange(1, 14, 1, 8).merge().setFontWeight("bold").setVerticalAlignment("middle").setHorizontalAlignment("center");
+    sheet.getRange(1, 22, 1, 8).merge().setFontWeight("bold").setVerticalAlignment("middle").setHorizontalAlignment("center");
+    sheet.getRange(1, 30, 1, 8).merge().setFontWeight("bold").setVerticalAlignment("middle").setHorizontalAlignment("center");
+  }
+
+  // Freeze Panes per far scorrere la tabella comodamente
+  sheet.setFrozenRows(2);
+  sheet.setFrozenColumns(5);
+  
+  // Larghezze colonne ottimizzate
+  const widths = [70, 120, 180, 60, 250,  60,60,60,70,85,70,60,50,  60,60,60,70,85,70,60,50,  60,60,60,70,85,70,60,50,  70,90,90];
+  widths.slice(0, nCols).forEach((w, i) => sheet.setColumnWidth(i + 1, w));
+}

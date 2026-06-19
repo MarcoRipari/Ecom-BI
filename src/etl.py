@@ -50,6 +50,7 @@ def load_and_clean_data(file_path: str) -> pd.DataFrame:
         elif col == 'ordine': rename_dict[col] = 'ordine_id'
         elif 'sku' in col: rename_dict[col] = 'sku_full'
         elif 'market place' in col or col == 'mkp': rename_dict[col] = 'mkp'
+        elif 'unnamed: 8' in col: rename_dict[col] = 'stato'
         
     df.rename(columns=rename_dict, inplace=True)
     df.columns = df.columns.str.replace(' ', '_')
@@ -122,28 +123,13 @@ def apply_business_logic(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def merge_returns_logic(df_vendite: pd.DataFrame, df_resi: pd.DataFrame) -> pd.DataFrame:
-    """Implementa la nuova logica di identificazione dei resi tramite chiave composta."""
+    """Implementa la logica originale di identificazione dei resi tramite colonna 'stato'."""
     
-    # Assicurati che questi siano i nomi ESATTI normalizzati dopo load_and_clean_data
-    # Se nel CSV si chiamano "Data Pagamento", diventeranno "data_pagamento"
-    col_data = 'data_pagamento'
-    col_cliente = 'nome_cliente'
-    col_sku = 'sku_full'
-    
-    for df in [df_vendite, df_resi]:
-        # Creiamo la chiave univoca: datapagamento_nomecliente_sku
-        # fillna("") evita che un campo nullo corrompa l'intera stringa
-        df['chiave_reso'] = (
-            df[col_data].fillna("").astype(str) + "_" + 
-            df[col_cliente].fillna("").astype(str) + "_" + 
-            df[col_sku].fillna("").astype(str)
-        )
-    
-    # Creiamo un set super veloce con le chiavi dei resi
-    resi_keys_set = set(df_resi['chiave_reso'])
-    
+    if 'stato' not in df_vendite.columns:
+        df_vendite['stato'] = ''
+        
     # Applichiamo il flag is_reso
-    df_vendite['is_reso'] = df_vendite['chiave_reso'].isin(resi_keys_set)
+    df_vendite['is_reso'] = df_vendite['stato'].str.lower().str.strip() == 'reso'
     
     # Creiamo le colonne paia spedite/rese finali (ricalcando logica backend.gs)
     df_vendite['paia_spedite'] = df_vendite['qta_abs']
