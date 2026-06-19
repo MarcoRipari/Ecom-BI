@@ -59,17 +59,19 @@ def load_and_clean_data(file_path: str) -> pd.DataFrame:
 def apply_business_logic(df: pd.DataFrame) -> pd.DataFrame:
     """Applica mapping, tassi di cambio, calcolo IVA e flag promozioni in modo vettoriale."""
     
-    # 1. Cast dei tipi numerici (gestione delle virgole europee per i decimali se presenti)
     cols_to_float = ['prezzo', 'importo', 'qta']
     for col in cols_to_float:
         if col in df.columns:
-            df[col] = (df[col]
-                       .astype(str)
-                       .str.strip()
-                       .str.replace('.', '', regex=False)  # Rimuove i separatori delle migliaia (1.437,00 -> 1437,00)
-                       .str.replace(',', '.', regex=False) # Converte la virgola in punto decimale (1437,00 -> 1437.00)
-                       .astype(float)
-                       .fillna(0))
+            if pd.api.types.is_numeric_dtype(df[col]):
+                df[col] = df[col].astype(float).fillna(0.0)
+            else:
+                df[col] = (df[col]
+                           .astype(str)
+                           .str.strip()
+                           .str.replace('.', '', regex=False)  # Rimuove i separatori delle migliaia
+                           .str.replace(',', '.', regex=False) # Converte la virgola in punto decimale
+                           .astype(float)
+                           .fillna(0.0))
             
     # Assicuriamoci che qta sia assoluta
     df['qta_abs'] = df['qta'].abs()
@@ -129,17 +131,18 @@ def merge_returns_logic(df_vendite: pd.DataFrame, df_resi: pd.DataFrame) -> pd.D
         df_vendite['stato'] = ''
         
     # Crea chiave in vendite per il match con df_resi
-    if 'data_pagamento' in df_vendite.columns and 'nome_cliente' in df_vendite.columns and 'sku_full' in df_vendite.columns:
-        chiave_vendite = df_vendite['data_pagamento'].fillna("").astype(str) + "_" + \
-                         df_vendite['nome_cliente'].fillna("").astype(str) + "_" + \
+    if 'ordine_id' in df_vendite.columns and 'sku_full' in df_vendite.columns:
+        chiave_vendite = df_vendite['ordine_id'].fillna("").astype(str) + "_" + \
                          df_vendite['sku_full'].fillna("").astype(str)
     else:
         chiave_vendite = pd.Series([""] * len(df_vendite))
 
     # Identifica le chiavi presenti nel master resi
     chiavi_rese = set()
-    if not df_resi.empty and 'chiave_reso' in df_resi.columns:
-        chiavi_rese = set(df_resi['chiave_reso'].unique())
+    if not df_resi.empty and 'ordine_id' in df_resi.columns and 'sku_full' in df_resi.columns:
+        chiave_reso = df_resi['ordine_id'].fillna("").astype(str) + "_" + \
+                      df_resi['sku_full'].fillna("").astype(str)
+        chiavi_rese = set(chiave_reso.unique())
 
     # Applichiamo il flag is_reso: è reso se lo stato dice 'reso' OPPURE se la chiave è trovata in df_resi
     is_reso_stato = df_vendite['stato'].str.lower().str.strip() == 'reso'
@@ -156,6 +159,10 @@ def merge_returns_logic(df_vendite: pd.DataFrame, df_resi: pd.DataFrame) -> pd.D
     df_vendite['netto_spedito'] = df_vendite['netto_abs']
     df_vendite['netto_reso'] = np.where(df_vendite['is_reso'], df_vendite['netto_abs'], 0.0)
     df_vendite['netto_netto'] = df_vendite['netto_spedito'] - df_vendite['netto_reso']
+
+    df_vendite['lordo_spedito'] = df_vendite['lordo_abs']
+    df_vendite['lordo_reso'] = np.where(df_vendite['is_reso'], df_vendite['lordo_abs'], 0.0)
+    df_vendite['lordo_netto'] = df_vendite['lordo_spedito'] - df_vendite['lordo_reso']
 
     return df_vendite
 

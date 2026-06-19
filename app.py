@@ -236,10 +236,27 @@ elif report_selezionato == "Carryover":
 elif report_selezionato == "Sell-Through":
     st.subheader("🔥 Analisi Sell-Through Stagionale")
     import os
-    if not os.path.exists('data/raw/BUYING.csv'):
-        st.error("⚠️ Il file **BUYING.csv** non è stato trovato in `data/raw/`. Carica il file degli ordini di acquisto (Sell-In) per calcolare il Sell-Through.")
+    if not os.path.exists('data/gold/buying.parquet'):
+        st.error("⚠️ Il file **buying.parquet** non è stato trovato in `data/gold/`. Esegui la pipeline notturna dopo aver caricato il file BUYING.csv.")
     else:
-        st.info("Logica Sell-Through in caricamento...")
+        df_buying = pd.read_parquet('data/gold/buying.parquet')
+        from src.reports_logic import aggregate_sellthrough
+        df_sellthrough = aggregate_sellthrough(df_filtered, df_buying)
+        
+        if not df_sellthrough.empty:
+            # Aggiungiamo dettagli anagrafici dal dataframe vendite
+            anagrafica_subset = df_filtered[['sku_13', 'clz_mappata', 'descrizione']].drop_duplicates('sku_13')
+            df_sellthrough = pd.merge(df_sellthrough, anagrafica_subset, on='sku_13', how='left')
+            
+            df_sellthrough = df_sellthrough[['sku_13', 'clz_mappata', 'descrizione', 'paia_acquistate', 'paia_nette', 'sell_through', 'fatturato_netto']]
+            
+            st.dataframe(df_sellthrough, use_container_width=True,
+                column_config={
+                    "sell_through": st.column_config.ProgressColumn(format="%.2f%%", min_value=0, max_value=100),
+                    "fatturato_netto": st.column_config.NumberColumn(format="€ %.2f")
+                })
+        else:
+            st.warning("Nessun dato corrispondente trovato.")
 
 elif report_selezionato == "Analisi Taglie":
     st.subheader("📏 Analisi Taglie per Brand e Genere")

@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 def calculate_global_metrics(df: pd.DataFrame) -> dict:
     """

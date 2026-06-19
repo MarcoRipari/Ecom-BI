@@ -74,3 +74,41 @@ def aggregate_taglie(df: pd.DataFrame) -> pd.DataFrame:
     agg['perc_reso'] = np.where(agg['paia_spedite'] > 0, agg['paia_rese'] / agg['paia_spedite'].replace(0, np.nan), 0) * 100
     
     return agg.sort_values(['brand', 'sotto_gruppo', 'taglia'])
+
+def aggregate_sellthrough(df_vendite: pd.DataFrame, df_buying: pd.DataFrame) -> pd.DataFrame:
+    """Calcola il Sell-Through unendo le vendite e il buying (acquisti)."""
+    if df_vendite.empty or df_buying.empty:
+        return pd.DataFrame()
+        
+    # Pulisci il dataframe buying
+    df_buying.columns = df_buying.columns.str.strip().str.lower().str.replace(' ', '_')
+    if 'articolo' not in df_buying.columns or 'quantita' not in df_buying.columns:
+        return pd.DataFrame()
+        
+    # Il campo ARTICOLO nel buying corrisponde a sku_13 (con i trattini da rimuovere)
+    df_buying['sku_13'] = df_buying['articolo'].astype(str).str.replace('-', '').str[:13]
+    df_buying['quantita'] = pd.to_numeric(df_buying['quantita'], errors='coerce').fillna(0)
+    
+    # Aggrega le paie acquistate per SKU
+    buying_agg = df_buying.groupby('sku_13')['quantita'].sum().reset_index()
+    buying_agg.rename(columns={'quantita': 'paia_acquistate'}, inplace=True)
+    
+    # Aggrega le vendite per SKU
+    vendite_agg = df_vendite.groupby('sku_13').agg(
+        paia_nette=('paia_nette', 'sum'),
+        fatturato_netto=('netto_netto', 'sum')
+    ).reset_index()
+    
+    # Merge
+    merged = pd.merge(buying_agg, vendite_agg, on='sku_13', how='left').fillna(0)
+    
+    # Calcolo Sell-Through
+    merged['sell_through'] = np.where(merged['paia_acquistate'] > 0, 
+                                      merged['paia_nette'] / merged['paia_acquistate'], 0) * 100
+    
+    # Cap a 100% per casi in cui le paia nette superano il buying (riassortimenti non tracciati)
+    merged['sell_through'] = merged['sell_through'].clip(upper=100)
+    
+    # Ordina per Sell-Through e Paia Nette
+    return merged.sort_values(['sell_through', 'paia_nette'], ascending=[False, False])
+
