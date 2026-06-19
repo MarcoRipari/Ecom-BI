@@ -6,6 +6,10 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch: # Permette di lanciare lo script manualmente da GitHub
 
+concurrency:
+  group: "data-pipeline"
+  cancel-in-progress: false
+
 jobs:
   run-etl-and-update-data:
     runs-on: ubuntu-latest
