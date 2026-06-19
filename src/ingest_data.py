@@ -3,8 +3,53 @@ import pandas as pd
 import sys
 import datetime
 
+import json
+
 def clean_columns(df):
     df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
+    return df
+
+def fix_anonymized_nations(df, last_col):
+    if 'naz' not in df.columns or last_col not in df.columns:
+        return df
+        
+    config_path = "config/nation_mapping.json"
+    if not os.path.exists(config_path):
+        os.makedirs("config", exist_ok=True)
+        default_config = {
+            "Miinto": {"action": "order_first_two"},
+            "Sarenza": {"action": "set", "value": "FR"}
+        }
+        with open(config_path, "w") as f:
+            json.dump(default_config, f, indent=4)
+            
+    with open(config_path, "r") as f:
+        mapping = json.load(f)
+        
+    mask = df['naz'].astype(str).str.lower().str.strip() == 'anonymized'
+    if not mask.any():
+        return df
+        
+    def resolve_single(mkp_val, ordine_val):
+        mkp_val = str(mkp_val).strip()
+        ordine_val = str(ordine_val).strip()
+        
+        for key, rule in mapping.items():
+            if key.lower() in mkp_val.lower():
+                if rule['action'] == 'order_first_two':
+                    return ordine_val[:2].upper()
+                elif rule['action'] == 'set':
+                    return rule['value']
+                    
+        if '_' in mkp_val:
+            return mkp_val.split('_')[0].upper()
+            
+        if len(mkp_val) >= 2:
+            return mkp_val[-2:].upper()
+            
+        return 'ND'
+
+    df.loc[mask, 'naz'] = df[mask].apply(lambda x: resolve_single(x[last_col], x.get('ordine_id', '')), axis=1)
     return df
 
 def ingest_vendite():
@@ -21,10 +66,13 @@ def ingest_vendite():
     
     df_new = clean_columns(df_new)
     
+    last_col = df_new.columns[-1]
+    
     # Rinominiamo colonne come in etl.py per coerenza
     rename_dict = {}
     for col in df_new.columns:
-        if 'quantit' in col: rename_dict[col] = 'qta'
+        if col == last_col: rename_dict[col] = 'mkp_source_ext'
+        elif 'quantit' in col: rename_dict[col] = 'qta'
         elif col == 'collezione': rename_dict[col] = 'clz'
         elif col == 'nazione': rename_dict[col] = 'naz'
         elif col == 'acquirente': rename_dict[col] = 'nome_cliente'
@@ -34,8 +82,11 @@ def ingest_vendite():
         elif 'unnamed:_8' in col or col == 'stato': rename_dict[col] = 'stato'
     df_new.rename(columns=rename_dict, inplace=True)
     
+    last_col_mapped = rename_dict.get(last_col, last_col)
+    df_new = fix_anonymized_nations(df_new, last_col_mapped)
+    
     if os.path.exists(master_path):
-        df_master = pd.read_parquet(master_path)
+        df_master = pd.read_parquet(master_path).astype(str)
         df_combined = pd.concat([df_master, df_new], ignore_index=True)
         # Deduplicazione su data, ordine, riga, sku
         dedup_cols = [c for c in ['data_pagamento', 'ordine_id', 'riga', 'sku_full'] if c in df_combined.columns]
@@ -62,9 +113,12 @@ def ingest_resi():
         
     df_new = clean_columns(df_new)
     
+    last_col = df_new.columns[-1]
+    
     rename_dict = {}
     for col in df_new.columns:
-        if 'quantit' in col: rename_dict[col] = 'qta'
+        if col == last_col: rename_dict[col] = 'mkp_source_ext'
+        elif 'quantit' in col: rename_dict[col] = 'qta'
         elif col == 'collezione': rename_dict[col] = 'clz'
         elif col == 'nazione': rename_dict[col] = 'naz'
         elif col == 'acquirente': rename_dict[col] = 'nome_cliente'
@@ -73,8 +127,11 @@ def ingest_resi():
         elif 'market_place' in col or col == 'mkp': rename_dict[col] = 'mkp'
     df_new.rename(columns=rename_dict, inplace=True)
     
+    last_col_mapped = rename_dict.get(last_col, last_col)
+    df_new = fix_anonymized_nations(df_new, last_col_mapped)
+    
     if os.path.exists(master_path):
-        df_master = pd.read_parquet(master_path)
+        df_master = pd.read_parquet(master_path).astype(str)
         df_combined = pd.concat([df_master, df_new], ignore_index=True)
         # Deduplicazione su data, ordine, riga, sku
         # In resi la data potrebbe chiamarsi diversamente (es. data_reso/sped.)

@@ -1,0 +1,9 @@
+{
+    "Miinto": {
+        "action": "order_first_two"
+    },
+    "Sarenza": {
+        "action": "set",
+        "value": "FR"
+    }
+}

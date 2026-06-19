@@ -337,3 +337,62 @@ elif report_selezionato == "🔧 Area Admin":
                     st.write(f"{status_icon} **{run['name']}** - {run['status']} (Conclusione: {run['conclusion']}) - [Vedi Log]({run['html_url']})")
             else:
                 st.info("Nessuna esecuzione recente trovata.")
+
+    st.markdown("---")
+    st.write("#### 🔎 Visualizzatore Dati Parquet")
+    st.markdown("Ispeziona i dati grezzi storici o elaborati.")
+    
+    col_file, col_date = st.columns(2)
+    with col_file:
+        parquet_file = st.selectbox("Seleziona File Parquet da esplorare:", [
+            "data/gold/bi_metrics.parquet (Vendite elaborate UI)",
+            "data/gold/buying.parquet (Acquisti elaborati UI)",
+            "data/storici/master_vendite.parquet (Storico Grezzo)",
+            "data/storici/master_resi.parquet (Storico Grezzo)",
+            "data/storici/anagrafica.parquet (Anagrafica Grezza)",
+            "data/storici/buying.parquet (Acquisti Grezzi)"
+        ])
+    
+    with col_date:
+        if st.checkbox("Filtra per data (se applicabile)"):
+            date_filter = st.date_input("Range date:", value=(min_date, max_date))
+        else:
+            date_filter = None
+            
+    try:
+        file_path = parquet_file.split(" ")[0]
+        df_parquet = pd.read_parquet(file_path)
+        
+        # Identifica colonna data
+        date_cols = [c for c in df_parquet.columns if 'data' in c.lower()]
+        date_c = None
+        for dc in ['data_vendita', 'data_pagamento', 'data_reso/sped.']:
+            if dc in df_parquet.columns:
+                date_c = dc
+                break
+        if not date_c and date_cols:
+            date_c = date_cols[0]
+            
+        if date_filter and len(date_filter) == 2 and date_c:
+            try:
+                # Prova a convertire per il filtro
+                df_parquet['_temp_date'] = pd.to_datetime(df_parquet[date_c], format="%d/%m/%Y", errors='coerce')
+                # Fallback
+                mask_na = df_parquet['_temp_date'].isna()
+                if mask_na.any():
+                    df_parquet.loc[mask_na, '_temp_date'] = pd.to_datetime(df_parquet.loc[mask_na, date_c], errors='coerce')
+                    
+                df_parquet = df_parquet[
+                    (df_parquet['_temp_date'].dt.date >= date_filter[0]) & 
+                    (df_parquet['_temp_date'].dt.date <= date_filter[1])
+                ]
+                df_parquet = df_parquet.drop(columns=['_temp_date'])
+            except Exception as e:
+                st.warning(f"Impossibile filtrare per data su questa colonna: {e}")
+                
+        st.write(f"Righe trovate: **{len(df_parquet):,}**")
+        st.dataframe(df_parquet.head(1000), use_container_width=True) # Mostra max 1000 righe per UI
+        
+    except FileNotFoundError:
+        st.error("Il file selezionato non è ancora stato generato.")
+
