@@ -123,13 +123,29 @@ def apply_business_logic(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def merge_returns_logic(df_vendite: pd.DataFrame, df_resi: pd.DataFrame) -> pd.DataFrame:
-    """Implementa la logica originale di identificazione dei resi tramite colonna 'stato'."""
+    """Implementa la logica originale di identificazione dei resi tramite colonna 'stato' e incrocio con df_resi."""
     
     if 'stato' not in df_vendite.columns:
         df_vendite['stato'] = ''
         
-    # Applichiamo il flag is_reso
-    df_vendite['is_reso'] = df_vendite['stato'].str.lower().str.strip() == 'reso'
+    # Crea chiave in vendite per il match con df_resi
+    if 'data_pagamento' in df_vendite.columns and 'nome_cliente' in df_vendite.columns and 'sku_full' in df_vendite.columns:
+        chiave_vendite = df_vendite['data_pagamento'].fillna("").astype(str) + "_" + \
+                         df_vendite['nome_cliente'].fillna("").astype(str) + "_" + \
+                         df_vendite['sku_full'].fillna("").astype(str)
+    else:
+        chiave_vendite = pd.Series([""] * len(df_vendite))
+
+    # Identifica le chiavi presenti nel master resi
+    chiavi_rese = set()
+    if not df_resi.empty and 'chiave_reso' in df_resi.columns:
+        chiavi_rese = set(df_resi['chiave_reso'].unique())
+
+    # Applichiamo il flag is_reso: è reso se lo stato dice 'reso' OPPURE se la chiave è trovata in df_resi
+    is_reso_stato = df_vendite['stato'].str.lower().str.strip() == 'reso'
+    is_reso_match = chiave_vendite.isin(chiavi_rese)
+    
+    df_vendite['is_reso'] = is_reso_stato | is_reso_match
     
     # Creiamo le colonne paia spedite/rese finali (ricalcando logica backend.gs)
     df_vendite['paia_spedite'] = df_vendite['qta_abs']
