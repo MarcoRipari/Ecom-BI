@@ -300,34 +300,34 @@ elif report_selezionato == "🔧 Area Admin":
             else:
                 if st.button(f"🚀 Carica {upload_type} su GitHub"):
                     from src.github_integration import upload_file_to_github
-                if "GITHUB_TOKEN" in st.secrets:
-                    token = st.secrets["GITHUB_TOKEN"]
-                    repo = "MarcoRipari/Ecom-BI"
-                    
-                    # Definisci il path di destinazione in base al tipo
-                    if upload_type == "VENDITE":
-                        path = "data/raw/vendite_oggi.csv"
-                    elif upload_type == "RESI":
-                        path = "data/raw/resi_oggi.csv"
-                    elif upload_type == "BUYING":
-                        path = "data/raw/buying_oggi.csv"
-                    elif upload_type == "ANAGRAFICA":
-                        path = "data/raw/anagrafica_oggi.csv"
+                    if "GITHUB_TOKEN" in st.secrets:
+                        token = st.secrets["GITHUB_TOKEN"]
+                        repo = "MarcoRipari/Ecom-BI"
                         
-                    with st.spinner(f"Caricamento di {upload_type} in corso..."):
-                        success = upload_file_to_github(
-                            token=token,
-                            repo=repo,
-                            file_path=path,
-                            new_content_bytes=uploaded_file.getvalue(),
-                            commit_message=f"Upload manuale file {upload_type} da Area Admin"
-                        )
-                        if success:
-                            st.success(f"✅ {upload_type} caricato con successo in `{path}`. Verrà processato dalla prossima pipeline ETL.")
-                        else:
-                            st.error("❌ Errore durante l'upload. Controlla il Token o i permessi del repository.")
-                else:
-                    st.error("❌ GITHUB_TOKEN non configurato nei secrets di Streamlit.")
+                        # Definisci il path di destinazione in base al tipo
+                        if upload_type == "VENDITE":
+                            path = "data/raw/vendite_oggi.csv"
+                        elif upload_type == "RESI":
+                            path = "data/raw/resi_oggi.csv"
+                        elif upload_type == "BUYING":
+                            path = "data/raw/buying_oggi.csv"
+                        elif upload_type == "ANAGRAFICA":
+                            path = "data/raw/anagrafica_oggi.csv"
+                            
+                        with st.spinner(f"Caricamento di {upload_type} in corso..."):
+                            success = upload_file_to_github(
+                                token=token,
+                                repo=repo,
+                                file_path=path,
+                                new_content_bytes=uploaded_file.getvalue(),
+                                commit_message=f"Upload manuale file {upload_type} da Area Admin"
+                            )
+                            if success:
+                                st.success(f"✅ {upload_type} caricato con successo in `{path}`. Verrà processato dalla prossima pipeline ETL.")
+                            else:
+                                st.error("❌ Errore durante l'upload. Controlla il Token o i permessi del repository.")
+                    else:
+                        st.error("❌ GITHUB_TOKEN non configurato nei secrets di Streamlit.")
                     
     with col2:
         st.write("#### ⚙️ Pipeline ETL")
