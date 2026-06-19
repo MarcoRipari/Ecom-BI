@@ -276,6 +276,18 @@ elif report_selezionato == "🔧 Area Admin":
     st.subheader("🛠️ Area Amministrazione e Upload Dati")
     st.markdown("In questa sezione puoi caricare nuovi dataset e forzare l'esecuzione della Pipeline ETL su GitHub Actions.")
     
+    from src.github_integration import trigger_github_workflow, get_workflow_runs
+    
+    # Check active runs
+    runs = []
+    is_running = False
+    if "GITHUB_TOKEN" in st.secrets:
+        runs = get_workflow_runs(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI")
+        is_running = any(r['status'] in ["in_progress", "queued"] for r in runs) if runs else False
+        
+    if is_running:
+        st.warning("⚠️ C'è una pipeline in elaborazione o in coda. I caricamenti sono disabilitati finché non termina per evitare conflitti su GitHub.")
+
     col1, col2 = st.columns(2)
     with col1:
         st.write("#### 📤 Upload Dataset")
@@ -283,8 +295,11 @@ elif report_selezionato == "🔧 Area Admin":
         uploaded_file = st.file_uploader(f"Carica il file {upload_type} (CSV)", type=["csv"])
         
         if uploaded_file is not None:
-            if st.button(f"🚀 Carica {upload_type} su GitHub"):
-                from src.github_integration import upload_file_to_github
+            if is_running:
+                st.button(f"⏳ Attendi fine pipeline per caricare", disabled=True)
+            else:
+                if st.button(f"🚀 Carica {upload_type} su GitHub"):
+                    from src.github_integration import upload_file_to_github
                 if "GITHUB_TOKEN" in st.secrets:
                     token = st.secrets["GITHUB_TOKEN"]
                     repo = "MarcoRipari/Ecom-BI"
@@ -316,27 +331,20 @@ elif report_selezionato == "🔧 Area Admin":
                     
     with col2:
         st.write("#### ⚙️ Pipeline ETL")
-        from src.github_integration import trigger_github_workflow, get_workflow_runs
         
-        # Check active runs
-        runs = []
-        is_running = False
-        if "GITHUB_TOKEN" in st.secrets:
-            runs = get_workflow_runs(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI")
-            is_running = any(r['status'] in ["in_progress", "queued"] for r in runs) if runs else False
-            
         if is_running:
-            st.warning("⚠️ C'è una pipeline in elaborazione o in coda. I file caricati ora verranno accodati in automatico senza creare conflitti.")
-        
-        if st.button("🔄 Forza Avvio ETL (GitHub Actions)"):
-            if "GITHUB_TOKEN" in st.secrets:
-                with st.spinner("Invio comando a GitHub..."):
-                    if trigger_github_workflow(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI"):
-                        st.success("✅ Pipeline ETL avviata! Il processo richiederà alcuni minuti.")
-                    else:
-                        st.error("❌ Impossibile avviare la pipeline. Verifica il token o il nome del workflow.")
-            else:
-                st.error("❌ GITHUB_TOKEN non configurato nei secrets di Streamlit.")
+            st.button("⏳ Attendi fine pipeline per avviare ETL", disabled=True)
+        else:
+            if st.button("🔄 Forza Avvio ETL (GitHub Actions)"):
+                if "GITHUB_TOKEN" in st.secrets:
+                    with st.spinner("Invio comando a GitHub..."):
+                        if trigger_github_workflow(st.secrets["GITHUB_TOKEN"], "MarcoRipari/Ecom-BI"):
+                            st.success("✅ Pipeline ETL avviata! Il processo richiederà alcuni minuti.")
+                            st.rerun()
+                        else:
+                            st.error("❌ Impossibile avviare la pipeline. Verifica il token o il nome del workflow.")
+                else:
+                    st.error("❌ GITHUB_TOKEN non configurato nei secrets di Streamlit.")
                 
         st.write("##### 📊 Coda e Stato Azioni (Ultime Esecuzioni):")
         if "GITHUB_TOKEN" in st.secrets:
