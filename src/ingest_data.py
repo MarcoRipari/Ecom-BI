@@ -37,6 +37,10 @@ def ingest_vendite():
     if os.path.exists(master_path):
         df_master = pd.read_parquet(master_path)
         df_combined = pd.concat([df_master, df_new], ignore_index=True)
+        # Deduplicazione su data, ordine, riga, sku
+        dedup_cols = [c for c in ['data_pagamento', 'ordine_id', 'riga', 'sku_full'] if c in df_combined.columns]
+        if dedup_cols:
+            df_combined.drop_duplicates(subset=dedup_cols, keep='last', inplace=True)
     else:
         df_combined = df_new
         
@@ -72,6 +76,12 @@ def ingest_resi():
     if os.path.exists(master_path):
         df_master = pd.read_parquet(master_path)
         df_combined = pd.concat([df_master, df_new], ignore_index=True)
+        # Deduplicazione su data, ordine, riga, sku
+        # In resi la data potrebbe chiamarsi diversamente (es. data_reso/sped.)
+        date_col = 'data_reso/sped.' if 'data_reso/sped.' in df_combined.columns else 'data_pagamento'
+        dedup_cols = [c for c in [date_col, 'ordine_id', 'riga', 'sku_full'] if c in df_combined.columns]
+        if dedup_cols:
+            df_combined.drop_duplicates(subset=dedup_cols, keep='last', inplace=True)
     else:
         df_combined = df_new
         
